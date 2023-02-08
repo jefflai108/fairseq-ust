@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import csv
 import yaml
-from examples.speech_matrix.data_helper.data_cfg import (
+from data_helper.data_cfg import (
     VP_LANGS,
     high_res_pairs,
     mid_res_pairs,
@@ -12,7 +12,7 @@ from examples.speech_matrix.data_helper.data_cfg import (
     audio_key,
     manifest_prefix,
 )
-from examples.speech_matrix.data_helper.model_cfg import hubert_config_hub
+from data_helper.model_cfg import hubert_config_hub
 
 
 def get_mine_threshold(lang_pair):

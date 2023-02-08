@@ -1,6 +1,6 @@
 import os
 import argparse
-from examples.speech_matrix.data_helper.data_cfg import (
+from data_helper.data_cfg import (
     DOWNLOAD_HUB,
     VP_LANGS,
     audio_key,

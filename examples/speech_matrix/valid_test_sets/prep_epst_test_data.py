@@ -1,7 +1,8 @@
-import os
+import os, sys
 import argparse
 import torchaudio
 import torchaudio.functional as F
+sys.path.append('/data/sls/scratch/clai24/lexicon/fairseq/')
 from examples.speech_matrix.data_helper.data_cfg import EP_LANGS, manifest_key
 from examples.speech_matrix.data_helper.cleaners import text_cleaners
 from examples.speech_matrix.data_helper.test_data_helper import gen_manifest
