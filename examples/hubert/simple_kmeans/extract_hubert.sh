@@ -1,12 +1,13 @@
 #!/bin/bash 
 
-tsv_dir=/data/sls/temp/clai24/lottery-ticket/fairseq/examples/wav2vec/data/train-clean-100
-split=train-clean-100
-ckpt_path=/data/sls/scratch/clai24/yung-sung/fairseq/examples/hubert/pretrained_models/hubert_base_ls960.pt
-layer=9
-nshard=10 
-rank=$1
-feat_dir=/data/sls/scratch/clai24/yung-sung/fairseq/examples/hubert/features/train-clean-100
+tsv_dir=/data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/simple_kmeans
+split=es_dummy
+ckpt_path=/data/sls/temp/clai24/pretrained-models/mHuBERT/En+Es+Fr/mhubert_base_vp_en_es_fr_it3.pt
+layer=11
+nshard=1
+rank=0
+feat_dir=/data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/simple_kmeans
 
 python dump_hubert_feature.py ${tsv_dir} ${split} ${ckpt_path} ${layer} ${nshard} ${rank} ${feat_dir}
+
 

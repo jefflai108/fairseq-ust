@@ -40,6 +40,8 @@ def get_path_iterator(tsv, nshard, rank):
         def iterate():
             for line in lines:
                 subpath, nsample = line.split("\t")
+                #subpath = line
+                #nsample = 0
                 yield f"{root}/{subpath}", int(nsample)
 
     return iterate, len(lines)

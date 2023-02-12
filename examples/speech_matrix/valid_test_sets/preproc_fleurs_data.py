@@ -9,7 +9,8 @@ from examples.speech_matrix.data_helper.data_cfg import FLEURS_LANGS
 
 def get_lang_data(lang, out_audio_dir, out_manifest_dir, split, out_sr=16000):
     lang_code = lang[:2]
-    data = load_dataset("fleurs", lang)
+    #data = load_dataset("fleurs", lang)
+    data = load_dataset("google/fleurs", lang, cache_dir='/data/sls/temp/clai24/data/speech_matrix/eval_data/fleurs')
     data_size = len(data[split])
     os.makedirs(out_audio_dir, exist_ok=True)
     os.makedirs(out_manifest_dir, exist_ok=True)
