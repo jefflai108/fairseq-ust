@@ -139,3 +139,9 @@ wandb/
 nohup.out
 multirun
 outputs
+
+# Custom 
+*.km
+*.tsv
+*.npy
+*.len
