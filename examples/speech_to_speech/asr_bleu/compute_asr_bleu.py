@@ -41,6 +41,9 @@ def extract_audio_for_eval(audio_dirpath: str, audio_format: str):
         """
         audio_list = []
         audio_fp_list = glob((Path(audio_dirpath) / "*_pred.wav").as_posix())
+        audio_fp_list = sorted(
+            audio_fp_list, key=lambda x: int(os.path.basename(x).split("_")[0])
+        )
         for i in range(len(audio_fp_list)):
             try:
                 audio_fp = (Path(audio_dirpath) / f"{i}_pred.wav").as_posix()
@@ -122,7 +125,7 @@ def load_eval_data_from_tsv(eval_data_filepath: str):
 def run_asr_bleu(args):
 
     asr_config = retrieve_asr_config(
-        args.lang, args.asr_version, json_path="./asr_model_cfgs.json"
+        args.lang, args.asr_version, json_path="asr_bleu/asr_model_cfgs.json"
     )
     asr_model = ASRGenerator(asr_config)
 
@@ -154,7 +157,7 @@ def run_asr_bleu(args):
 
     print(bleu_score)
 
-    return bleu_score
+    return prediction_transcripts, bleu_score
 
 
 def main():
@@ -206,10 +209,16 @@ def main():
         type=str,
         help="If specified, the resulting BLEU score will be written to this file path as txt file",
     )
+    parser.add_argument(
+        "--transcripts_path",
+        default=None,
+        type=str,
+        help="If specified, the predicted transcripts will be written to this path as a txt file.",
+    )
 
     args = parser.parse_args()
 
-    bleu_score = run_asr_bleu(args)
+    prediction_transcripts, bleu_score = run_asr_bleu(args)
     result_filename = f"{args.reference_format}_{args.lang}_bleu.txt"
     if args.results_dirpath is not None:
         if not Path(args.results_dirpath).exists():
@@ -217,6 +226,10 @@ def main():
         with open(Path(args.results_dirpath) / result_filename, "w") as f:
             f.write(bleu_score.format(width=2))
 
+    if args.transcripts_path is not None:
+        with open(args.transcripts_path, "w") as f:
+            for transcript in prediction_transcripts:
+                f.write(transcript + "\n")
 
 if __name__ == "__main__":
     main()
