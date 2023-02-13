@@ -2,10 +2,10 @@
 
 stage=0
 
-SRC=es
+SRC=fr
 TGT=en
 
-BEAM=10
+BEAM=5
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
 GEN_SUBSET=test_epst 
 RESULTS_PATH=/data/sls/temp/clai24/data/speech_matrix/textless_s2ut_gen/${SRC}-${TGT}_beam${BEAM}

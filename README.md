@@ -1,7 +1,7 @@
 ![Universal Speech Translator](ust.png?raw=true "UST")
 
 
-# Universal Speech Translator
+# Jeff's UST Fork
 
 Universal Speech Translator (UST) is the project to enable speech-to-speech translation with real-time, natural-sounding translations at near-human level quality. This code repository open sources our latest works for the mission, including code, model architecture design, data mining, and benchmark efforts.
 

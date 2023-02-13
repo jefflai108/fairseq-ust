@@ -6,7 +6,7 @@ from pathlib import Path
 from utils import retrieve_asr_config, ASRGenerator
 from tqdm import tqdm
 from argparse import ArgumentParser
-
+import os
 
 def merge_tailo_init_final(text):
     """

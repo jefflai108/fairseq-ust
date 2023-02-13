@@ -2,8 +2,8 @@
 
 stage=0
 
-SRC=es
-TGT=en
+SRC=en
+TGT=fr
 
 BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
