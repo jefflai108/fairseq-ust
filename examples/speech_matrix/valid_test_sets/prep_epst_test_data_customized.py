@@ -5,9 +5,26 @@ import torchaudio.functional as F
 
 from data_helper.data_cfg import EP_LANGS, manifest_key
 from data_helper.cleaners import text_cleaners
-from data_helper.test_data_helper import gen_manifest
+from data_helper.test_data_helper import (
+    gen_s2u_manifest, 
+    read_aud_manifest,
+)
+from data_helper.valid_data_helper import (
+    gen_asr_manifest,
+    parse_unit_fn,
+)
+from data_helper.hubert_helper import extract_lang_units
 
 domain = "epst"
+
+def gen_manifest(
+    src_aud_manifest, src_unit_fn, s2u_manifest, asr_manifest
+):
+    aud_ids, nframes, aud_paths = read_aud_manifest(src_aud_manifest)
+    src_units = parse_unit_fn(src_unit_fn)
+    assert len(aud_ids) == len(src_units)
+    gen_s2u_manifest(aud_ids, nframes, aud_paths, s2u_manifest)
+    gen_asr_manifest(aud_ids, src_units, asr_manifest)
 
 
 def extract_and_downsample_segment(
@@ -98,11 +115,13 @@ if __name__ == "__main__":
     parser.add_argument("--epst-dir", type=str, required=True)
     parser.add_argument("--proc-epst-dir", type=str, required=True)
     parser.add_argument("--save-root", type=str, required=True)
+    parser.add_argument("--hubert-model-dir", type=str, required=True)
     args = parser.parse_args()
 
     os.makedirs(args.proc_epst_dir, exist_ok=True)
 
     for src_lang in EP_LANGS:
+        src_lang_code = src_lang 
         for tgt_lang in EP_LANGS:
             if src_lang == tgt_lang:
                 continue
@@ -117,12 +136,25 @@ if __name__ == "__main__":
             )
 
             print(f"Generating manifests: {src_lang}-{tgt_lang}...")
-            aud_manifest_fn = os.path.join(
+
+            manifest_dir = os.path.join(
                 args.proc_epst_dir,
                 "aud_manifests",
-                f"{src_lang}-{tgt_lang}",
+                f"{src_lang}-{tgt_lang}"
+            )
+            aud_manifest_fn = os.path.join(
+                manifest_dir, 
                 f"test_{domain}_{src_lang}_{tgt_lang}.tsv",
             )
+            extract_lang_units(
+                aud_manifest_fn,
+                src_lang_code,
+                manifest_dir,
+                args.hubert_model_dir,
+            )
+            src_unit_fn = os.path.join(manifest_dir, f"test_{domain}_{src_lang}_{tgt_lang}.km")
+
+
             manifest_dir = os.path.join(
                 args.save_root, manifest_key, f"{src_lang}-{tgt_lang}"
             )
@@ -132,6 +164,7 @@ if __name__ == "__main__":
 
             gen_manifest(
                 aud_manifest_fn,
+                src_unit_fn,
                 s2u_manifest_fn,
                 asr_manifest_fn,
             )

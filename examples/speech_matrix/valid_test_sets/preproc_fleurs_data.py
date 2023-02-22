@@ -4,7 +4,7 @@ import torch
 import torchaudio
 import torchaudio.functional as F
 from datasets import load_dataset
-from examples.speech_matrix.data_helper.data_cfg import FLEURS_LANGS
+from data_helper.data_cfg import FLEURS_LANGS
 
 
 def get_lang_data(lang, out_audio_dir, out_manifest_dir, split, out_sr=16000):
