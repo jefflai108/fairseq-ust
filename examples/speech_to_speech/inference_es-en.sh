@@ -8,7 +8,18 @@ TGT=${2:-en}
 BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
 GEN_SUBSET=test_epst 
-RESULTS_PATH=/data/sls/temp/clai24/data/speech_matrix/textless_s2ut_gen/${SRC}-${TGT}_beam${BEAM}
+GEN_SUBSET=test_epst_filter120
+
+############### pre-trained models released from FAIR #################
+TRAINED_S2S_MODEL=/data/sls/temp/clai24/pretrained-models/bilingual_textless_s2st/checkpoint_textless_${SRC}_${TGT}.pt
+RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_FAIR_beam${BEAM}
+#######################################################################
+
+############### our own model trained on filtered data #################
+TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter100/checkpoint_best.pt
+RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter100_beam${BEAM}/
+########################################################################
+
 WAVE_PATH=${RESULTS_PATH}/waveforms
 mkdir -p ${WAVE_PATH}
 VOCODER_CKPT=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/vocoder_${TGT}.pt
@@ -19,13 +30,16 @@ if [ $stage -eq 0 ]; then
     fairseq-generate $DATA_ROOT \
       --config-yaml config.yaml --multitask-config-yaml config_multitask.yaml \
       --task speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan \
-      --path /data/sls/temp/clai24/pretrained-models/bilingual_textless_s2st/checkpoint_textless_${SRC}_${TGT}.pt --gen-subset $GEN_SUBSET \
+      --path ${TRAINED_S2S_MODEL} --gen-subset $GEN_SUBSET \
       --max-tokens 50000 \
       --beam $BEAM --max-len-a 1 \
       --results-path ${RESULTS_PATH}
 fi 
 
 if [ $stage -le 1 ]; then 
+    # ensure no pre-existing waves
+    [ -d ${WAVE_PATH} ] && rm -r ${WAVE_PATH}
+
     # unit-to-speech vocoder synthesis
     grep "^D\-" ${RESULTS_PATH}/generate-${GEN_SUBSET}.txt | \
       sed 's/^D-//ig' | sort -nk1 | cut -f3 \
@@ -45,5 +59,5 @@ if [ $stage -le 2 ]; then
         --reference_path ${REFERENCE_TEXT} \
         --reference_format txt \
         --results_dirpath ${RESULTS_PATH} \
-        --transcripts_path ${RESULTS_PATH}/asr_transcription_text
+        --transcripts_path ${RESULTS_PATH}/asr_transcription_${GEN_SUBSET}
 fi

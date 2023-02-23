@@ -1,12 +1,12 @@
 import os
 import argparse
 from collections import defaultdict
-from examples.speech_matrix.data_helper.data_cfg import (
+from data_helper.data_cfg import (
     FLEURS_LANGS,
     FLORES_LANG_MAP,
     manifest_key,
 )
-from examples.speech_matrix.data_helper.cleaners import text_cleaners
+from data_helper.cleaners import text_cleaners
 
 
 domain = "fleurs"

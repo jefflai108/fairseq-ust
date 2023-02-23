@@ -7,10 +7,10 @@ from datasets import load_dataset
 from data_helper.data_cfg import FLEURS_LANGS
 
 
-def get_lang_data(lang, out_audio_dir, out_manifest_dir, split, out_sr=16000):
+def get_lang_data(lang, out_audio_dir, out_manifest_dir, split, cache_dir, out_sr=16000):
     lang_code = lang[:2]
     #data = load_dataset("fleurs", lang)
-    data = load_dataset("google/fleurs", lang, cache_dir='/data/sls/temp/clai24/data/speech_matrix/eval_data/fleurs')
+    data = load_dataset("google/fleurs", lang, cache_dir=cache_dir)
     data_size = len(data[split])
     os.makedirs(out_audio_dir, exist_ok=True)
     os.makedirs(out_manifest_dir, exist_ok=True)
@@ -60,6 +60,8 @@ def get_lang_data(lang, out_audio_dir, out_manifest_dir, split, out_sr=16000):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("FLEURS testset preparation")
     parser.add_argument("--proc-fleurs-dir", type=str, required=True)
+    parser.add_argument("--cache-dir", type=str, required=True, 
+                        default='/data/sls/temp/clai24/data/speech_matrix/eval_data/fleurs')
     args = parser.parse_args()
 
     os.makedirs(args.proc_fleurs_dir, exist_ok=True)
@@ -72,5 +74,6 @@ if __name__ == "__main__":
                 out_audio_dir=os.path.join(args.proc_fleurs_dir, "audios", lang_code),
                 out_manifest_dir=os.path.join(args.proc_fleurs_dir, "aud_manifests"),
                 split=split,
+                cache_dir=args.cache_dir, 
                 out_sr=16000,
             )

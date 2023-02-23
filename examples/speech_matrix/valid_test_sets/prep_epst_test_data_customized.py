@@ -67,6 +67,7 @@ def segment_epst_aud(
     os.makedirs(tmp_out_aud_dir, exist_ok=True)
     os.makedirs(out_tsv_dir, exist_ok=True)
 
+    skipped_idx = []
     for split in ["test"]:
         tsv_fn = os.path.join(
             out_tsv_dir, "_".join([split, domain, src_lang, tgt_lang]) + ".tsv"
@@ -78,7 +79,7 @@ def segment_epst_aud(
         # seg_id: <audio_file>_<start>_<end>
         seg_fn = os.path.join(epst_dir, src_lang, tgt_lang, split, "segments.lst")
         with open(seg_fn, "r") as fin:
-            for line in fin:
+            for idx, line in enumerate(fin):
                 aud, st, et = line.strip().split()
                 aud_path = os.path.join(src_aud_dir, aud + ".m4a")
                 tmp_aud_path = os.path.join(tmp_out_aud_dir, aud + ".wav")
@@ -90,11 +91,17 @@ def segment_epst_aud(
                 nframes = extract_and_downsample_segment(
                     tmp_aud_path, float(st), float(et), seg_path, out_sr=16000
                 )
+                if nframes < 400: # wav2vec 2.0 architecture requires an input with at least 400 samples 
+                    skipped_idx.append(idx)
+                    print('skipped %s\n' % seg_fn)
+                    continue 
                 tsv_out.write(seg_fn + "\t" + str(nframes) + "\n")
         tsv_out.close()
 
+    return skipped_idx
 
-def normalize_translations(epst_dir, src_lang, tgt_lang, manifest_dir, domain="epst"):
+
+def normalize_translations(epst_dir, src_lang, tgt_lang, manifest_dir, skipped_idx, domain="epst"):
     in_tsv_dir = os.path.join(epst_dir, src_lang, tgt_lang)
     # for split in ["train", "dev", "test"]:
     for split in ["test"]:
@@ -103,8 +110,10 @@ def normalize_translations(epst_dir, src_lang, tgt_lang, manifest_dir, domain="e
         out_trans_fn = os.path.join(manifest_dir, f"{split}_{domain}.{tgt_lang}")
         fin = open(in_trans_fn, "r")
         fout = open(out_trans_fn, "w")
-        for line in fin:
+        for idx, line in enumerate(fin):
             proc_line = text_cleaners(line.strip(), tgt_lang)
+            if idx in skipped_idx:
+                continue 
             fout.write(proc_line + "\n")
         fin.close()
         fout.close()
@@ -126,7 +135,7 @@ if __name__ == "__main__":
             if src_lang == tgt_lang:
                 continue
             print(f"processing EPST audios: {src_lang}-{tgt_lang}...")
-            segment_epst_aud(
+            skipped_idx = segment_epst_aud(
                 args.epst_dir,
                 src_lang,
                 tgt_lang,
@@ -169,5 +178,5 @@ if __name__ == "__main__":
                 asr_manifest_fn,
             )
             normalize_translations(
-                args.epst_dir, src_lang, tgt_lang, manifest_dir, domain=domain
+                args.epst_dir, src_lang, tgt_lang, manifest_dir, skipped_idx, domain=domain
             )
