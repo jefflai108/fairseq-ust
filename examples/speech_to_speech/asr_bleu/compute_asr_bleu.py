@@ -192,6 +192,10 @@ def main():
         help="Format of reference file. Txt means plain text format where each line represents single reference sequence",
     )
     parser.add_argument(
+        "--reference_split",
+        help="Test split, for output file naming convenience.",
+    )
+    parser.add_argument(
         "--reference_tsv_column",
         default=None,
         type=str,
@@ -219,7 +223,7 @@ def main():
     args = parser.parse_args()
 
     prediction_transcripts, bleu_score = run_asr_bleu(args)
-    result_filename = f"{args.reference_format}_{args.lang}_bleu.txt"
+    result_filename = f"{args.reference_split}_{args.lang}_bleu.txt"
     if args.results_dirpath is not None:
         if not Path(args.results_dirpath).exists():
             Path(args.results_dirpath).mkdir(parents=True)

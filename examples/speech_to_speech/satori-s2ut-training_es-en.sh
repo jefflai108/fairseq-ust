@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 
 SRC=${1:-es}
 TGT=${2:-en}
@@ -11,7 +11,7 @@ else
     UPDATE_FREQ=4
 fi
 
-DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
+DATA_ROOT=/nobackup/users/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
 
 if [ $L -eq 100 ]; then
     ######## L <= 100 #######
@@ -49,10 +49,10 @@ if [ $L -eq 1000 ]; then
     VALID_SET="valid_vp"
 fi
 
-MODEL_DIR=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}
+MODEL_DIR=/nobackup/users/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}
 mkdir -p ${MODEL_DIR}
 
-# reduce "max-update" from 400000 to speedup model development. 
+# reduce "max-update" from 400000 to speedup model development.
 # based on our initial training run, 25k steps should suffice for `train_mined_t1.09_filter100`
 # added "--no-epoch-checkpoints' to avoid saving intermediate ckpts
 # experimenting for `train_mined_t1.09_filter{200,250,400,500}` now. Guess 50k steps suffice.

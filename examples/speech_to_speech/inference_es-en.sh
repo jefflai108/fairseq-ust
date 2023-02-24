@@ -4,11 +4,11 @@ stage=0
 
 SRC=${1:-es}
 TGT=${2:-en}
+L=${3:-100}
 
 BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
 GEN_SUBSET=test_epst 
-GEN_SUBSET=test_epst_filter120
 
 ############### pre-trained models released from FAIR #################
 TRAINED_S2S_MODEL=/data/sls/temp/clai24/pretrained-models/bilingual_textless_s2st/checkpoint_textless_${SRC}_${TGT}.pt
@@ -16,14 +16,16 @@ RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT
 #######################################################################
 
 ############### our own model trained on filtered data #################
-TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter100/checkpoint_best.pt
-RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter100_beam${BEAM}/
+TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter${L}/checkpoint_best.pt
+RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter${L}_beam${BEAM}/
 ########################################################################
 
 WAVE_PATH=${RESULTS_PATH}/waveforms
 mkdir -p ${WAVE_PATH}
 VOCODER_CKPT=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/vocoder_${TGT}.pt
 VOCODER_CFG=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/config_${TGT}.json
+
+for GEN_SUBSET in test_epst test_epst_filter${L}; do
 
 if [ $stage -eq 0 ]; then 
     # textless S2UT model inference
@@ -58,6 +60,9 @@ if [ $stage -le 2 ]; then
         --audio_dirpath ${WAVE_PATH} \
         --reference_path ${REFERENCE_TEXT} \
         --reference_format txt \
+        --reference_split ${GEN_SUBSET} \
         --results_dirpath ${RESULTS_PATH} \
         --transcripts_path ${RESULTS_PATH}/asr_transcription_${GEN_SUBSET}
 fi
+
+done 
