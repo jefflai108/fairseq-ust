@@ -43,12 +43,6 @@ if [ $L -eq 500 ]; then
     VALID_SET="valid_vp_filter500"
 fi
 
-if [ $L -eq 1000 ]; then
-    ######## L <= 1k #######
-    TRAIN_SET="train_mined_t1.09"
-    VALID_SET="valid_vp"
-fi
-
 MODEL_DIR=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}
 mkdir -p ${MODEL_DIR}
 

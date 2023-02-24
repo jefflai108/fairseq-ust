@@ -15,17 +15,18 @@ TRAINED_S2S_MODEL=/data/sls/temp/clai24/pretrained-models/bilingual_textless_s2s
 RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_FAIR_beam${BEAM}
 #######################################################################
 
-############### our own model trained on filtered data #################
+############### our own model trained on filtered data ################
 TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter${L}/checkpoint_best.pt
 RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter${L}_beam${BEAM}/
-########################################################################
+#######################################################################
 
 WAVE_PATH=${RESULTS_PATH}/waveforms
 mkdir -p ${WAVE_PATH}
 VOCODER_CKPT=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/vocoder_${TGT}.pt
 VOCODER_CFG=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/config_${TGT}.json
 
-for GEN_SUBSET in test_epst test_epst_filter${L}; do
+#for GEN_SUBSET in valid_vp_filter${L}; do 
+for GEN_SUBSET in test_epst test_epst_filter${L} test_fleurs; do
 
 if [ $stage -eq 0 ]; then 
     # textless S2UT model inference
@@ -35,7 +36,7 @@ if [ $stage -eq 0 ]; then
       --path ${TRAINED_S2S_MODEL} --gen-subset $GEN_SUBSET \
       --max-tokens 50000 \
       --beam $BEAM --max-len-a 1 \
-      --results-path ${RESULTS_PATH}
+      --results-path ${RESULTS_PATH} 
 fi 
 
 if [ $stage -le 1 ]; then 
