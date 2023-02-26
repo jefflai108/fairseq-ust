@@ -24,116 +24,9 @@ from fairseq.data.audio.speech_to_text_dataset import (
 from fairseq.tasks import LegacyFairseqTask, register_task
 from fairseq.tasks.speech_to_text import DummyMultiTask
 from fairseq.tasks.text_to_speech import batch_mel_cepstral_distortion
+from fairseq.tasks.speech_to_speech import StackUnitSequenceGenerator
 
 logger = logging.getLogger(__name__)
-
-
-class StackUnitSequenceGenerator(nn.Module):
-    def __init__(self, tgt_dict, vocab_size):
-        super().__init__()
-        self.pad = tgt_dict.pad()
-        self.eos = tgt_dict.eos()
-        self.unk = tgt_dict.unk()
-        self.offset = len(tgt_dict) - vocab_size
-        self.vocab_size = vocab_size
-
-    def pack_units(self, input: torch.Tensor, n_frames_per_step) -> torch.Tensor:
-        if n_frames_per_step <= 1:
-            return input
-
-        bsz, _, n = input.shape
-        assert n == n_frames_per_step
-
-        scale = [
-            pow(self.vocab_size, n_frames_per_step - 1 - i)
-            for i in range(n_frames_per_step)
-        ]
-        scale = torch.LongTensor(scale).squeeze(0).to(input.device)
-        mask = input >= self.offset
-        res = ((input - self.offset) * scale * mask).sum(dim=2) + self.offset
-        return res
-
-    @torch.no_grad()
-    def generate(self, models, sample, **kwargs):
-        # currently only support viterbi search for stacked units
-        model = models[0]
-        model.eval()
-
-        max_len = model.max_decoder_positions()
-        # TODO: incorporate max_len_a and max_len_b
-
-        src_tokens = sample["net_input"]["src_tokens"]
-        src_lengths = sample["net_input"]["src_lengths"]
-        bsz, src_len, _ = src_tokens.size()
-        n_frames_per_step = model.decoder.n_frames_per_step
-
-        # initialize
-        encoder_out = model.forward_encoder(
-            src_tokens, src_lengths, speaker=sample["speaker"]
-        )
-        incremental_state = {}
-        pred_out, attn, scores = [], [], []
-        finished = src_tokens.new_zeros((bsz,)).bool()
-
-        prev_output_tokens = src_lengths.new_zeros((bsz, 1)).long().fill_(self.eos)
-        for _ in range(max_len):
-            cur_out, cur_extra = model.forward_decoder(
-                prev_output_tokens,
-                encoder_out=encoder_out,
-                incremental_state=incremental_state,
-            )
-
-            lprobs = model.get_normalized_probs([cur_out], log_probs=True)
-            # never select pad, unk
-            lprobs[:, :, self.pad] = -math.inf
-            lprobs[:, :, self.unk] = -math.inf
-
-            cur_pred_lprob, cur_pred_out = torch.max(lprobs, dim=2)
-            scores.append(cur_pred_lprob)
-            pred_out.append(cur_pred_out)
-
-            prev_output_tokens = torch.cat(
-                (
-                    prev_output_tokens,
-                    self.pack_units(
-                        cur_pred_out.view(bsz, 1, n_frames_per_step), n_frames_per_step
-                    ),
-                ),
-                dim=1,
-            )
-
-            attn.append(cur_extra["attn"][0])
-
-            cur_finished = torch.any(cur_pred_out.squeeze(1) == self.eos, dim=1)
-            finished = finished | cur_finished
-            if finished.sum().item() == bsz:
-                break
-
-        pred_out = torch.cat(pred_out, dim=1).view(bsz, -1)
-        attn = torch.cat(attn, dim=2)
-        alignment = attn.max(dim=1)[1]
-        attn = attn.repeat_interleave(n_frames_per_step, dim=2)
-        alignment = alignment.repeat_interleave(n_frames_per_step, dim=1)
-        scores = torch.cat(scores, dim=1)
-        eos_idx = (pred_out == self.eos).nonzero(as_tuple=True)
-        out_lens = src_lengths.new_zeros((bsz,)).long().fill_(max_len)
-        for b, l in zip(eos_idx[0], eos_idx[1]):
-            out_lens[b] = min(l, out_lens[b])
-
-        hypos = [
-            [
-                {
-                    "tokens": pred_out[b, :out_len],
-                    "attn": attn[b, :, :out_len],
-                    "alignment": alignment[b, :out_len],
-                    "positional_scores": scores[b, :out_len],
-                    "score": utils.item(scores[b, :out_len].sum().data),
-                }
-            ]
-            for b, out_len in zip(range(bsz), out_lens)
-        ]
-
-        return hypos
 
 
 @register_task("lexical_speech_to_speech")
@@ -339,7 +232,7 @@ class LexicalSpeechToSpeechTask(LegacyFairseqTask):
         model = super().build_model(args, from_checkpoint)
 
         if len(self.multitask_tasks) > 0:
-            from fairseq.models.speech_to_speech.u2u_transformer import (
+            from fairseq.models.unit_to_unit.u2u_transformer import (
                 U2UTransformerMultitaskModelBase,
             )
 

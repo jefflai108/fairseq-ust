@@ -1,6 +1,5 @@
 #!/bin/bash 
 
-
 SRC=${1:-es}
 TGT=${2:-en}
 MULTI_GPU=${3:-true}
@@ -56,7 +55,7 @@ mkdir -p ${MODEL_DIR}
 # reduce "max-update" from 400000 to speedup model development. 
 # based on our initial training run, 25k steps should suffice for `train_mined_t1.09_filter100`
 # added "--no-epoch-checkpoints' to avoid saving intermediate ckpts
-# experimenting for `train_mined_t1.09_filter{200,250,400,500}` now. Guess 50k steps suffice.
+# experimenting for `train_mined_t1.09_filter{200,250,400,500,1024}` now. Guess 50k steps suffice.
 # removed "--multitask-config-yaml config_multitask.yaml" as we use src unit has input 
 fairseq-train $DATA_ROOT \
   --config-yaml config.yaml \
