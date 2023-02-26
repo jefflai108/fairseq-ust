@@ -43,13 +43,20 @@ if [ $L -eq 500 ]; then
     VALID_SET="valid_vp_filter500"
 fi
 
+if [ $L -eq 1024 ]; then
+    ######## L <= 1k #######
+    TRAIN_SET="train_mined_t1.09_filter1024"
+    VALID_SET="valid_vp_filter800"
+fi 
+
 MODEL_DIR=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}
 mkdir -p ${MODEL_DIR}
 
 # reduce "max-update" from 400000 to speedup model development. 
 # based on our initial training run, 25k steps should suffice for `train_mined_t1.09_filter100`
 # added "--no-epoch-checkpoints' to avoid saving intermediate ckpts
-# experimenting for `train_mined_t1.09_filter{200,250,400,500}` now. Guess 50k steps suffice.
+# experimenting for `train_mined_t1.09_filter{200,250,400,500,1024}` now. Guess 50k steps suffice.
+# We are using a smaller speech encoder by setting "--arch s2ut_transformer_fisher". For fair comparison w.r.t SpeechMatrix, switch to "--arch s2ut_transformer"
 fairseq-train $DATA_ROOT \
   --config-yaml config.yaml --multitask-config-yaml config_multitask.yaml \
   --task speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan  \
