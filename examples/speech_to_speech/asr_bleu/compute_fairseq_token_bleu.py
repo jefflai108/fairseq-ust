@@ -51,5 +51,8 @@ if __name__ == '__main__':
 
     #refs, sys = preprocess_training_log('/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/es-en_v0-train_mined_t1.09_filter500_beam10/generate-valid_vp_filter500.unit', 
     #                                    '/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/es-en/valid_vp_filter500.tsv') # BLEU = 24.57 54.1/32.3/20.0/12.5 (BP = 0.956 ratio = 0.957 hyp_len = 206639 ref_len = 215853)
+    
+    #refs, sys = preprocess_training_log('/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/es-en_v0-train_mined_t1.09_filter1024_beam10/generate-valid_vp_filter1024.unit', 
+    #                                    '/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/es-en/valid_vp_filter1024.tsv') # BLEU = 23.90 55.8/33.3/20.5/12.7 (BP = 0.905 ratio = 0.909 hyp_len = 320367 ref_len = 352289)
 
     compute_bleu(refs, sys)

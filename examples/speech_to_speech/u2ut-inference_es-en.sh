@@ -10,14 +10,9 @@ BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
 GEN_SUBSET=test_epst 
 
-############### pre-trained models released from FAIR #################
-TRAINED_S2S_MODEL=/data/sls/temp/clai24/pretrained-models/bilingual_textless_s2st/checkpoint_textless_${SRC}_${TGT}.pt
-RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_FAIR_beam${BEAM}
-#######################################################################
-
 ############### our own model trained on filtered data ################
-TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter${L}/checkpoint_best.pt
-RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter${L}_beam${BEAM}/
+TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter${L}_u2u/checkpoint_best.pt
+RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.09_filter${L}_u2u_beam${BEAM}/
 #######################################################################
 
 WAVE_PATH=${RESULTS_PATH}/waveforms
@@ -25,16 +20,19 @@ mkdir -p ${WAVE_PATH}
 VOCODER_CKPT=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/vocoder_${TGT}.pt
 VOCODER_CFG=/data/sls/temp/clai24/data/speech_matrix/unit_vocoder/config_${TGT}.json
 
-#for GEN_SUBSET in valid_vp_filter${L}; do 
-for GEN_SUBSET in test_epst test_epst_filter${L} test_fleurs; do
+#for ORIG_GEN_SUBSET in valid_vp_filter${L}; do 
+for ORIG_GEN_SUBSET in test_epst test_epst_filter${L} test_fleurs; do
+
+GEN_SUBSET=${ORIG_GEN_SUBSET}_u2u
 
 if [ $stage -eq 0 ]; then 
     # textless S2UT model inference
     fairseq-generate $DATA_ROOT \
-      --config-yaml config.yaml --multitask-config-yaml config_multitask.yaml \
-      --task speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan \
+      --config-yaml config.yaml \
+      --task lexical_speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan \
+      --source-is-code --source-code-size 1000 \
       --path ${TRAINED_S2S_MODEL} --gen-subset $GEN_SUBSET \
-      --max-tokens 50000 \
+      --max-tokens 40000 \
       --beam $BEAM --max-len-a 1 \
       --results-path ${RESULTS_PATH} 
 fi 
@@ -56,7 +54,7 @@ fi
 
 if [ $stage -le 2 ]; then 
     # ASR-BLEU eval 
-    REFERENCE_TEXT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}/${GEN_SUBSET}.${TGT}
+    REFERENCE_TEXT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}/${ORIG_GEN_SUBSET}.${TGT}
     python asr_bleu/compute_asr_bleu.py --lang ${TGT} \
         --audio_dirpath ${WAVE_PATH} \
         --reference_path ${REFERENCE_TEXT} \
