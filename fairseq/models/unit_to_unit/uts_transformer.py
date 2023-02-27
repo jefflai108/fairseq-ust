@@ -37,6 +37,12 @@ def Embedding(num_embeddings, embedding_dim):
 
 
 class UTSTransformerEncoder(FairseqEncoder):
+    """ 
+    Unit-to-Unit Transformer encoder, based on Text-to-Speech Transformer encoder. 
+
+    Reference: 
+        fairseq.models.text_to_speech.tts_transformer.TTSTransformerEncoder
+    """
     def __init__(self, args, src_dict, embed_speaker):
         super().__init__(src_dict)
         self.padding_idx = src_dict.pad()
