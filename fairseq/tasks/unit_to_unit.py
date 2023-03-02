@@ -29,7 +29,7 @@ from fairseq.tasks.speech_to_speech import StackUnitSequenceGenerator
 logger = logging.getLogger(__name__)
 
 
-@register_task("lexical_speech_to_speech")
+@register_task("unit_to_unit")
 class LexicalSpeechToSpeechTask(LegacyFairseqTask):
     @classmethod
     def add_args(cls, parser):

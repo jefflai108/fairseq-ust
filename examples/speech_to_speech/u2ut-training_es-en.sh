@@ -3,7 +3,7 @@
 SRC=${1:-es}
 TGT=${2:-en}
 MULTI_GPU=${3:-true}
-L=${4:-100}
+L=${4:-50}
 
 if [ "$MULTI_GPU" = true ]; then
     UPDATE_FREQ=1
@@ -12,6 +12,12 @@ else
 fi
 
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
+
+if [ $L -eq 50 ]; then
+    ######## L <= 50 #######
+    TRAIN_SET="train_mined_t1.09_filter50_u2u"
+    VALID_SET="valid_vp_filter50_u2u"
+fi
 
 if [ $L -eq 100 ]; then
     ######## L <= 100 #######
@@ -59,7 +65,7 @@ mkdir -p ${MODEL_DIR}
 # removed "--multitask-config-yaml config_multitask.yaml" as we use src unit has input 
 fairseq-train $DATA_ROOT \
   --config-yaml config.yaml \
-  --task lexical_speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan  \
+  --task unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan  \
   --source-is-code --source-code-size 1000 \
   --criterion speech_to_unit --label-smoothing 0.2 \
   --arch u2ut_transformer_fisher --share-decoder-input-output-embed \

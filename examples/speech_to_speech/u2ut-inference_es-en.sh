@@ -29,7 +29,7 @@ if [ $stage -eq 0 ]; then
     # textless S2UT model inference
     fairseq-generate $DATA_ROOT \
       --config-yaml config.yaml \
-      --task lexical_speech_to_speech --target-is-code --target-code-size 1000 --vocoder code_hifigan \
+      --task unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan \
       --source-is-code --source-code-size 1000 \
       --path ${TRAINED_S2S_MODEL} --gen-subset $GEN_SUBSET \
       --max-tokens 40000 \

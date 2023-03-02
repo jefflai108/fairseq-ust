@@ -11,6 +11,7 @@ from .transformer_config import (
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
 from .transformer_decoder import TransformerDecoder, TransformerDecoderBase, Linear
+from .transformer_decoder_with_raw_attn import RawTransformerDecoder, RawTransformerDecoderBase
 from .transformer_encoder import TransformerEncoder, TransformerEncoderBase
 from .transformer_legacy import (
     TransformerModel,
