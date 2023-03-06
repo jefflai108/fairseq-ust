@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import json 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -236,8 +235,8 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
         # lexical translation arguments
         self.is_copy = args.is_copy
         self.lex_alignment_prob = None
-        if self.is_copy and args.lex_alignment_json:
-            self.lex_alignment_prob = np.load(args.lex_alignment_json)
+        if self.is_copy and args.lex_alignment_npy:
+            self.lex_alignment_prob = np.load(args.lex_alignment_npy)
             self.tgt_vocab_size = self.tgt_dict.__len__()
             assert self.lex_alignment_prob.shape[1] == self.tgt_vocab_size
 
@@ -355,7 +354,5 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
                     x = x[
                         :, : -(self.n_frames_per_step - 1), :
                     ]  # remove extra frames after <eos>
-
-        print('x.shape is', x.shape)
 
         return x, extra

@@ -4,11 +4,17 @@ stage=0
 
 SRC=${1:-es}
 TGT=${2:-en}
-L=${3:-100}
+L=${3:-50}
 
 BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
+LEXICON_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/lexicon_alignment/${SRC}-${TGT}
 GEN_SUBSET=test_epst 
+
+if [ $L -eq 50 ]; then
+    ######## L <= 50 #######
+    LEX_ALIGN_FILE="diag.align.filter50_u2u_probt0.1.npy"
+fi
 
 ############### our own model trained on filtered data ################
 TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-train_mined_t1.09_filter${L}_u2u/checkpoint_best.pt
@@ -29,13 +35,16 @@ if [ $stage -eq 0 ]; then
     # textless S2UT model inference
     fairseq-generate $DATA_ROOT \
       --config-yaml config.yaml \
-      --task unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan \
+      --task token_lexical_unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan \
       --source-is-code --source-code-size 1000 \
+      --is-copy --lex-alignment-npy ${LEXICON_ROOT}/${LEX_ALIGN_FILE} \
       --path ${TRAINED_S2S_MODEL} --gen-subset $GEN_SUBSET \
       --max-tokens 40000 \
       --beam $BEAM --max-len-a 1 \
       --results-path ${RESULTS_PATH} 
 fi 
+
+exit 0
 
 if [ $stage -le 1 ]; then 
     # ensure no pre-existing waves

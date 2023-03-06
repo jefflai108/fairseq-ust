@@ -77,7 +77,7 @@ fairseq-train $DATA_ROOT \
   --config-yaml config.yaml \
   --task token_lexical_unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan  \
   --source-is-code --source-code-size 1000 \
-  --is-copy --lex-alignment-json ${LEXICON_ROOT}/${LEX_ALIGN_FILE} \
+  --is-copy --lex-alignment-npy ${LEXICON_ROOT}/${LEX_ALIGN_FILE} \
   --criterion speech_to_unit --label-smoothing 0.2 \
   --arch token_lex_u2ut_transformer_fisher --share-decoder-input-output-embed \
   --dropout 0.1 --attention-dropout 0.1 --relu-dropout 0.1 \
