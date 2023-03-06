@@ -4,9 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+import json 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch import Tensor
 import torch.nn.functional as F
@@ -223,6 +225,22 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
             args, dictionary, embed_tokens, no_encoder_attn, output_projection
         )
 
+        # Fairseq dictionary 
+        self.tgt_dict = dictionary
+        assert self.tgt_dict.bos() == 0
+        assert self.tgt_dict.pad() == 1
+        assert self.tgt_dict.eos() == 2
+        assert self.tgt_dict.unk() == 3
+        self.tgt_dict_offset = 4
+
+        # lexical translation arguments
+        self.is_copy = args.is_copy
+        self.lex_alignment_prob = None
+        if self.is_copy and args.lex_alignment_json:
+            self.lex_alignment_prob = np.load(args.lex_alignment_json)
+            self.tgt_vocab_size = self.tgt_dict.__len__()
+            assert self.lex_alignment_prob.shape[1] == self.tgt_vocab_size
+
         # learnable attention weights 
         self.alpha_w = Linear(args.decoder_attention_heads, 1, bias=False)
 
@@ -233,8 +251,22 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
 
         self.EPS = 1e-7
 
+    def _get_attention_projection(self, src_tokens: Tensor, lexicon: np.ndarray) -> Tensor:
+        bsz, src_seq_len = src_tokens.size() 
+
+        # proj is a very sparse matrix in B, T', V size
+        proj = np.zeros((bsz, src_seq_len, self.tgt_vocab_size), dtype=np.int64)
+
+        # lexicon is np.ndarray that maps an input token index to output probabilities
+        # its shape is (V', V) where V' is the size of the input vocabulary, 
+        inputs = src_tokens.cpu().numpy()
+        for i in range(bsz):
+            proj[i, range(src_seq_len), :] = lexicon[inputs[i, :], :]
+        return torch.tensor(proj, dtype=torch.float32, device=src_tokens.device)
+
     def forward(
         self,
+        src_tokens, 
         prev_output_tokens,
         encoder_out: Optional[Dict[str, List[Tensor]]] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
@@ -287,48 +319,43 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
             if self.out_proj_n_frames:
                 x = self.out_proj_n_frames(x)
 
-            #if self.copy and attention_token_projection is not None:
-            if True:
+            if self.is_copy and self.lex_alignment_prob is not None:
+                attention_token_projection = self._get_attention_projection(src_tokens, self.lex_alignment_prob)
+
                 hidden_states = x
                 prediction_logits = self.output_layer(hidden_states.view(bsz, seq_len, d))
                 prediction_probs = utils.softmax(prediction_logits, dim=-1, onnx_trace=self.onnx_trace)
                
                 # p_gate learned from h_i: \sigmoid(w_gate*hi)
-                gate_probs = torch.sigmoid(self.copy_gate(hidden_states))
+                gate_logits = self.copy_gate(hidden_states)
+                gate_probs = F.sigmoid(gate_logits)
                 
                 # compute \alpha_i^j by weighted sum over attn_head_raw_weights. Be careful with the masking 
                 attn_masking = (attn_head_raw_weights == -torch.inf)[0]
                 attn_head_raw_weights = torch.where(attn_head_raw_weights == -torch.inf, 0, attn_head_raw_weights)
                 attn_raw_weights = self.alpha_w(attn_head_raw_weights.transpose(0, -1)).transpose(0, -1) # (1, batch_size, tgt_seq_len, src_seq_len)
                 attn_raw_weights = torch.where(attn_masking, -torch.inf, attn_raw_weights)
-                alpha_ij = utils.softmax(attn_raw_weights, dim=-1, onnx_trace=self.onnx_trace)
+                alpha_ij = utils.softmax(attn_raw_weights, dim=-1, onnx_trace=self.onnx_trace).squeeze(0)
 
-                # TODO(ekin): calculate/get the attention token projection matrix, 
-                # it is B x T' x V matrix where T' is the length of the source sequence
-                # it is function of the source tokens and the lexicon
-                copy_probs = alpha_ij.unsqueeze(2) * attention_token_projection
+                copy_probs = torch.bmm(alpha_ij, attention_token_projection)
                 
-                # TODO(ekin): This is not good. Coudln't we do everything in log space?
+                # "P(total) = P(gate) * P(copy) + (1-P(gate)) * P(pred)" 
                 total_probs = copy_probs * (gate_probs + self.EPS) + prediction_probs * (1 - gate_probs + self.EPS)
 
                 # back to log_space 
                 x = torch.log(total_probs)
             else:
-                # w/o copy mechanism 
+                # default, w/o copy mechanism 
                 x = self.output_layer(x.view(bsz, seq_len, self.n_frames_per_step, d))
+                x = x.view(bsz, seq_len * self.n_frames_per_step, -1)
 
-            #print(F.log_softmax(x, dim=-1)[0])
-            #print(F.log_softmax(prediction_probs, dim=-1)[0])
-            #print(x.shape) # torch.Size([batch_size, tgt_seq_len, 1, dict_size])
+                if (
+                    incremental_state is None and self.n_frames_per_step > 1
+                ):  # teacher-forcing mode in training
+                    x = x[
+                        :, : -(self.n_frames_per_step - 1), :
+                    ]  # remove extra frames after <eos>
 
-            x = x.view(bsz, seq_len * self.n_frames_per_step, -1)
-
-            if (
-                incremental_state is None and self.n_frames_per_step > 1
-            ):  # teacher-forcing mode in training
-                x = x[
-                    :, : -(self.n_frames_per_step - 1), :
-                ]  # remove extra frames after <eos>
+        print('x.shape is', x.shape)
 
         return x, extra
-

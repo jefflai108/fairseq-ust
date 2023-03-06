@@ -34,6 +34,20 @@ class TokenLexicalSpeechToSpeechTask(LegacyFairseqTask):
     @classmethod
     def add_args(cls, parser):
         parser.add_argument("data", help="manifest root path")
+
+        # lexical translation arguments 
+        parser.add_argument(
+            "--is-copy",
+            action="store_true",
+            help="enable copy mechanism for translation",
+        )
+        parser.add_argument(
+            "--lex-alignment-json", 
+            type=str, 
+            help="leixon alignment json file."
+        )
+
+        # unit-to-unit arguments 
         parser.add_argument(
             "--config-yaml",
             type=str,
@@ -400,6 +414,7 @@ class TokenLexicalSpeechToSpeechTask(LegacyFairseqTask):
         return loss, sample_size, logging_output
 
     def valid_step(self, sample, model, criterion):
+
         for task_name, task_obj in self.multitask_tasks.items():
             if task_name in model.multitask_decoders:
                 model.multitask_decoders[task_name].eval()
@@ -416,6 +431,8 @@ class TokenLexicalSpeechToSpeechTask(LegacyFairseqTask):
         return loss, sample_size, logging_output
 
     def valid_step_with_inference(self, sample, model, generator):
+        print('shittttt')
+        exit()
         if self.args.target_is_code:
             hypos = generator.generate([model], sample)
             tgt_lens = (

@@ -12,47 +12,55 @@ else
 fi
 
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
+LEXICON_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/lexicon_alignment/${SRC}-${TGT}
 
 if [ $L -eq 50 ]; then
     ######## L <= 50 #######
     TRAIN_SET="train_mined_t1.09_filter50_u2u"
     VALID_SET="valid_vp_filter50_u2u"
+    LEX_ALIGN_FILE="diag.align.filter50_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 100 ]; then
     ######## L <= 100 #######
     TRAIN_SET="train_mined_t1.09_filter100_u2u"
     VALID_SET="valid_vp_filter100_u2u"
+    LEX_ALIGN_FILE="diag.align.filter100_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 200 ]; then
     ######## L <= 200 #######
     TRAIN_SET="train_mined_t1.09_filter200_u2u"
     VALID_SET="valid_vp_filter200_u2u"
+    LEX_ALIGN_FILE="diag.align.filter200_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 250 ]; then
     ######## L <= 250 #######
     TRAIN_SET="train_mined_t1.09_filter250_u2u"
     VALID_SET="valid_vp_filter250_u2u"
+    LEX_ALIGN_FILE="diag.align.filter250_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 400 ]; then
     ######## L <= 400 #######
     TRAIN_SET="train_mined_t1.09_filter400_u2u"
     VALID_SET="valid_vp_filter400_u2u"
+    LEX_ALIGN_FILE="diag.align.filter400_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 500 ]; then
     ######## L <= 500 #######
     TRAIN_SET="train_mined_t1.09_filter500_u2u"
     VALID_SET="valid_vp_filter500_u2u"
+    LEX_ALIGN_FILE="diag.align.filter500_u2u_probt0.1.npy"
 fi
 
 if [ $L -eq 1024 ]; then
     ######## L <= 1k #######
     TRAIN_SET="train_mined_t1.09_filter1024_u2u"
     VALID_SET="valid_vp_filter800_u2u"
+    LEX_ALIGN_FILE="diag.align.filter800_u2u_probt0.1.npy"
 fi 
 
 [ $L -ne 50 ] && exit 0
@@ -69,6 +77,7 @@ fairseq-train $DATA_ROOT \
   --config-yaml config.yaml \
   --task token_lexical_unit_to_unit --target-is-code --target-code-size 1000 --vocoder code_hifigan  \
   --source-is-code --source-code-size 1000 \
+  --is-copy --lex-alignment-json ${LEXICON_ROOT}/${LEX_ALIGN_FILE} \
   --criterion speech_to_unit --label-smoothing 0.2 \
   --arch token_lex_u2ut_transformer_fisher --share-decoder-input-output-embed \
   --dropout 0.1 --attention-dropout 0.1 --relu-dropout 0.1 \

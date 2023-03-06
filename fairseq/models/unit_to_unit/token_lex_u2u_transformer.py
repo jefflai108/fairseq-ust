@@ -327,6 +327,7 @@ class TokenLexU2UTTransformerModel(TokenLexU2UTransformerMultitaskModelBase):
             return_all_hiddens=return_all_hiddens,
         )
         decoder_out = self.decoder(
+            src_tokens, 
             prev_output_tokens,
             encoder_out=encoder_out,
         )
