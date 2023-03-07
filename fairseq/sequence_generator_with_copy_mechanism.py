@@ -267,6 +267,7 @@ class SequenceGeneratorCopyMech(SequenceGenerator):
 
                 if self.token_indices_to_suppress is not None:
                     lprobs[:, self.token_indices_to_suppress] = -math.inf
+            
 
             # Record attention scores, only support avg_attn_scores is a Tensor
             if avg_attn_scores is not None:
@@ -376,6 +377,7 @@ class SequenceGeneratorCopyMech(SequenceGenerator):
 
                 scores = scores.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
                 tokens = tokens.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
+                new_src_tokens = new_src_tokens.view(bsz, -1)[batch_idxs].view(new_bsz * beam_size, -1)
                 if attn is not None:
                     attn = attn.view(bsz, -1)[batch_idxs].view(
                         new_bsz * beam_size, attn.size(1), -1
@@ -421,7 +423,6 @@ class SequenceGeneratorCopyMech(SequenceGenerator):
             active_scores = active_scores.view(-1)
 
             # copy tokens and scores for active hypotheses
-
             # Set the tokens for each beam (can select the same row more than once)
             tokens[:, : step + 1] = torch.index_select(
                 tokens[:, : step + 1], dim=0, index=active_bbsz_idx

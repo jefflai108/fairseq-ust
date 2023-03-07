@@ -702,6 +702,13 @@ def load_model_ensemble_and_task(
 
                 argspec = inspect.getfullargspec(task.build_model)
                 if "from_checkpoint" in argspec.args:
+                    if (
+                        hasattr(cfg.model, "lex_alignment_npy") 
+                        and hasattr(task.args, "lex_alignment_npy") 
+                        and cfg.model.lex_alignment_npy != task.args.lex_alignment_npy
+                    ): 
+                        # hack of overwriting lex.npy for models transferred from Satori 
+                        cfg.model.lex_alignment_npy = task.args.lex_alignment_npy
                     model = task.build_model(cfg.model, from_checkpoint=True)
                 else:
                     model = task.build_model(cfg.model)

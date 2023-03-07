@@ -311,6 +311,11 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
         #   3. of shape torch.Size([num_head, batch_size, tgt_seq_len, src_seq_len])
         attn_head_raw_weights = extra["raw_attn"][-1]
 
+        #print('src_tokens shape', src_tokens.shape)
+        #print('prev_output_tokens shape', prev_output_tokens.shape)
+        #print('x shape', x.shape)
+        #print(features_only)
+
         if not features_only:
             bsz, seq_len, d = x.size()
             assert self.n_frames_per_step == 1
@@ -336,6 +341,8 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
                 attn_raw_weights = torch.where(attn_masking, -torch.inf, attn_raw_weights)
                 alpha_ij = utils.softmax(attn_raw_weights, dim=-1, onnx_trace=self.onnx_trace).squeeze(0)
 
+                #print(alpha_ij.shape) # torch.Size([480, 1, 727])
+                #print(attention_token_projection.shape) # torch.Size([480, 727, 1004])
                 copy_probs = torch.bmm(alpha_ij, attention_token_projection)
                 
                 # "P(total) = P(gate) * P(copy) + (1-P(gate)) * P(pred)" 
@@ -354,5 +361,7 @@ class TransformerUnitDecoderCopyMechanism(RawTransformerUnitDecoder):
                     x = x[
                         :, : -(self.n_frames_per_step - 1), :
                     ]  # remove extra frames after <eos>
+
+        #print('x.shape is', x.shape)
 
         return x, extra

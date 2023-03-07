@@ -159,7 +159,7 @@ class TokenLexicalSpeechToSpeechTask(LegacyFairseqTask):
         tgt_dict = None
         src_dict = None
         infer_tgt_lang_id = None
-        
+                
         if args.target_is_code:
             if data_cfg.prepend_tgt_lang_tag_as_bos:
                 # dictionary with language tags
@@ -242,7 +242,7 @@ class TokenLexicalSpeechToSpeechTask(LegacyFairseqTask):
         args.input_channels = self.data_cfg.input_transformed_channels
         args.target_speaker_embed = self.data_cfg.target_speaker_embed is not None
         args.n_frames_per_step = self.args.n_frames_per_step
-
+       
         model = super().build_model(args, from_checkpoint)
 
         if len(self.multitask_tasks) > 0:

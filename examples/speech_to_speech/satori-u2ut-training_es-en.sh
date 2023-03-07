@@ -62,6 +62,7 @@ mkdir -p ${MODEL_DIR}
 # based on our initial training run, 25k steps should suffice for `train_mined_t1.09_filter100`
 # added "--no-epoch-checkpoints' to avoid saving intermediate ckpts
 # experimenting for `train_mined_t1.09_filter{200,250,400,500,1024}` now. Guess 50k steps suffice.
+# We are using a smaller speech encoder by setting "--arch s2ut_transformer_fisher". For fair comparison w.r.t SpeechMatrix, switch to "--arch s2ut_transformer"
 # removed "--multitask-config-yaml config_multitask.yaml" as we use src unit has input
 # reduce "--max-tokens 20000" to "--max-tokens 15000"
 fairseq-train $DATA_ROOT \
