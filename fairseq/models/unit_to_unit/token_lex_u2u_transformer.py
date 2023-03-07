@@ -20,13 +20,13 @@ from fairseq.models import (
 )
 from fairseq.models.speech_to_speech.hub_interface import S2SHubInterface
 from fairseq.models.speech_to_speech.modules import CTCDecoder, StackedEmbedding
-from fairseq.models.unit_to_unit.unit_decoder import TransformerUnitDecoder
+from fairseq.models.unit_to_unit.unit_decoder import TransformerUnitDecoderCopyMechanism
 from fairseq.models.unit_to_unit.uts_transformer import UTSTransformerEncoder
 from fairseq.models.transformer import Linear, TransformerDecoder, TransformerModelBase
 
 logger = logging.getLogger(__name__)
 
-class U2UTransformerMultitaskModelBase(FairseqEncoderDecoderModel):
+class TokenLexU2UTransformerMultitaskModelBase(FairseqEncoderDecoderModel):
     @classmethod
     def build_encoder(cls, args, src_dict=None):
         encoder = UTSTransformerEncoder(args, src_dict, args.target_speaker_embed)
@@ -114,8 +114,8 @@ class U2UTransformerMultitaskModelBase(FairseqEncoderDecoderModel):
         )
 
 
-@register_model("u2ut_transformer")
-class U2UTTransformerModel(U2UTransformerMultitaskModelBase):
+@register_model("token_lex_u2ut_transformer")
+class TokenLexU2UTTransformerModel(TokenLexU2UTransformerMultitaskModelBase):
     """
     Based on "Direct speech-to-speech translation model https://arxiv.org/abs/2107.05604"
     
@@ -306,7 +306,7 @@ class U2UTTransformerModel(U2UTransformerMultitaskModelBase):
             num_stacked=args.n_frames_per_step,
         )
 
-        return TransformerUnitDecoder(
+        return TransformerUnitDecoderCopyMechanism(
             args,
             tgt_dict,
             embed_tokens,
@@ -327,6 +327,7 @@ class U2UTTransformerModel(U2UTransformerMultitaskModelBase):
             return_all_hiddens=return_all_hiddens,
         )
         decoder_out = self.decoder(
+            src_tokens, 
             prev_output_tokens,
             encoder_out=encoder_out,
         )
@@ -374,7 +375,7 @@ def base_multitask_text_transformer_decoder_arch(args):
     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 4)
 
 
-def base_u2ut_transformer_encoder_architecture(args):
+def base_token_lex_u2ut_transformer_encoder_architecture(args):
     args.encoder_freezing_updates = getattr(args, "encoder_freezing_updates", 0)
 
     # Transformer
@@ -394,10 +395,10 @@ def base_u2ut_transformer_encoder_architecture(args):
 
 
 @register_model_architecture(
-    model_name="u2ut_transformer", arch_name="u2ut_transformer"
+    model_name="token_lex_u2ut_transformer", arch_name="token_lex_u2ut_transformer"
 )
 def u2ut_architecture_base(args):
-    base_u2ut_transformer_encoder_architecture(args)
+    base_token_lex_u2ut_transformer_encoder_architecture(args)
 
     # decoder
     args.decoder_embed_dim = getattr(args, "decoder_embed_dim", args.encoder_embed_dim)
@@ -425,10 +426,10 @@ def u2ut_architecture_base(args):
     args.quant_noise_pq = getattr(args, "quant_noise_pq", 0)
 
 
-@register_model_architecture("u2ut_transformer", "u2ut_transformer_fisher")
+@register_model_architecture("token_lex_u2ut_transformer", "token_lex_u2ut_transformer_fisher")
 def u2ut_architecture_fisher(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 256)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
     args.dropout = getattr(args, "dropout", 0.1)
-
+    
     u2ut_architecture_base(args)

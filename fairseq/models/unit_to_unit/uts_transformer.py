@@ -124,8 +124,8 @@ class UTSTransformerEncoder(FairseqEncoder):
             else [],  # B x T
             "encoder_embedding": [],  # B x T x C
             "encoder_states": encoder_states,  # List[T x B x C]
-            "src_tokens": [],
-            "src_lengths": [],
+            "src_tokens": [src_tokens],
+            "src_lengths": [src_lengths],
         }
 
     def reorder_encoder_out(self, encoder_out, new_order):
@@ -152,6 +152,14 @@ class UTSTransformerEncoder(FairseqEncoder):
             ]
         )
 
+        new_src_tokens = (
+            []
+            if len(encoder_out["src_tokens"]) == 0 
+            else [ 
+                x.index_select(0, new_order) for x in encoder_out["src_tokens"]
+            ]
+        )
+
         encoder_states = encoder_out["encoder_states"]
         if len(encoder_states) > 0:
             for idx, state in enumerate(encoder_states):
@@ -162,6 +170,6 @@ class UTSTransformerEncoder(FairseqEncoder):
             "encoder_padding_mask": new_encoder_padding_mask,  # B x T
             "encoder_embedding": new_encoder_embedding,  # B x T x C
             "encoder_states": encoder_states,  # List[T x B x C]
-            "src_tokens": [],  # B x T
+            "src_tokens": new_src_tokens,  # B x T
             "src_lengths": [],  # B x 1
         }

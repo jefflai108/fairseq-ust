@@ -3,7 +3,7 @@
 SRC=${1:-es}
 TGT=${2:-en}
 MULTI_GPU=${3:-true}
-L=${4:-100}
+L=${4:-50}
 
 if [ "$MULTI_GPU" = true ]; then
     UPDATE_FREQ=1
@@ -12,6 +12,12 @@ else
 fi
 
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
+
+if [ $L -eq 50 ]; then
+    ######## L <= 50 #######
+    TRAIN_SET="train_mined_t1.09_filter50"
+    VALID_SET="valid_vp_filter50"
+fi
 
 if [ $L -eq 100 ]; then
     ######## L <= 100 #######
@@ -52,7 +58,7 @@ fi
 MODEL_DIR=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}
 mkdir -p ${MODEL_DIR}
 
-# reduce "max-update" from 400000 to speedup model development. 
+# reduce "max-update" from 400000 to speedup model development.
 # based on our initial training run, 25k steps should suffice for `train_mined_t1.09_filter100`
 # added "--no-epoch-checkpoints' to avoid saving intermediate ckpts
 # experimenting for `train_mined_t1.09_filter{200,250,400,500,1024}` now. Guess 50k steps suffice.
