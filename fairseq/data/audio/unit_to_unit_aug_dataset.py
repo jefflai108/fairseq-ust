@@ -160,9 +160,8 @@ class UnitToUnitAugDataset(UnitToTextDataset):
                 src_unit = self.unit_seq_augmentation(orig_src_unit, self.aug_params[0], self.aug_params[1])
             else:
                 src_unit = orig_src_unit
-
             source = self.src_dict.encode_line(
-                self.src_audio_paths[index], 
+                src_unit, 
                 add_if_not_exist=False,
                 append_eos=True,
             ).long()
