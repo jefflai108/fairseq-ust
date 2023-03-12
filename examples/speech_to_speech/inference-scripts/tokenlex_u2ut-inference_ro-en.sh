@@ -5,6 +5,7 @@ stage=0
 SRC=${1:-ro}
 TGT=${2:-en}
 L=${3:-50}
+LEXICON_T=${4:-0.1}
 
 BEAM=10
 DATA_ROOT=/data/sls/temp/clai24/data/speech_matrix/speech_to_unit/s2u_manifests/${SRC}-${TGT}
@@ -15,54 +16,54 @@ if [ $L -eq 50 ]; then
     ######## L <= 50 #######
     TRAIN_SET="train_mined_t1.07_filter50_u2u"
     VALID_SET="valid_vp_filter50_u2u"
-    LEX_ALIGN_FILE="diag.align.filter50_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter50_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 100 ]; then
     ######## L <= 100 #######
     TRAIN_SET="train_mined_t1.07_filter100_u2u"
     VALID_SET="valid_vp_filter100_u2u"
-    LEX_ALIGN_FILE="diag.align.filter100_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter100_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 200 ]; then
     ######## L <= 200 #######
     TRAIN_SET="train_mined_t1.07_filter200_u2u"
     VALID_SET="valid_vp_filter200_u2u"
-    LEX_ALIGN_FILE="diag.align.filter200_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter200_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 250 ]; then
     ######## L <= 250 #######
     TRAIN_SET="train_mined_t1.07_filter250_u2u"
     VALID_SET="valid_vp_filter250_u2u"
-    LEX_ALIGN_FILE="diag.align.filter250_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter250_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 400 ]; then
     ######## L <= 400 #######
     TRAIN_SET="train_mined_t1.07_filter400_u2u"
     VALID_SET="valid_vp_filter400_u2u"
-    LEX_ALIGN_FILE="diag.align.filter400_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter400_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 500 ]; then
     ######## L <= 500 #######
     TRAIN_SET="train_mined_t1.07_filter500_u2u"
     VALID_SET="valid_vp_filter500_u2u"
-    LEX_ALIGN_FILE="diag.align.filter500_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter500_u2u_probt${LEXICON_T}.npy"
 fi
 
 if [ $L -eq 1024 ]; then
     ######## L <= 1k #######
     TRAIN_SET="train_mined_t1.07_filter1024_u2u"
     VALID_SET="valid_vp_filter800_u2u"
-    LEX_ALIGN_FILE="diag.align.filter1024_u2u_probt0.1.npy"
+    LEX_ALIGN_FILE="diag.align.filter1024_u2u_probt${LEXICON_T}.npy"
 fi
 
 ############### our own model trained on filtered data ################
-TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}_diag.align.probt0.1/checkpoint_best.pt
-RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.07_filter${L}_u2u_diag.align.probt0.1_beam${BEAM}/
+TRAINED_S2S_MODEL=/data/sls/scratch/clai24/lexicon/exp/bilingual_textless_s2st/${SRC}-${TGT}/v0-${TRAIN_SET}_diag.align.probt${LEXICON_T}/checkpoint_best.pt
+RESULTS_PATH=/data/sls/scratch/clai24/lexicon/exp/textless_s2ut_gen/${SRC}-${TGT}_v0-train_mined_t1.07_filter${L}_u2u_diag.align.probt${LEXICON_T}_beam${BEAM}/
 #######################################################################
 
 WAVE_PATH=${RESULTS_PATH}/waveforms
