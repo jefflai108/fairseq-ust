@@ -35,6 +35,9 @@ class HubertFeatureReader(object):
         self.task = task
         self.layer = layer
         self.max_chunk = max_chunk
+        self.feature_downsampling = 16000 / 50 
+        logger.info(self.feature_downsampling)
+        exit()
         logger.info(f"TASK CONFIG:\n{self.task.cfg}")
         logger.info(f" max_chunk = {self.max_chunk}")
 
@@ -55,11 +58,17 @@ class HubertFeatureReader(object):
             x = torch.from_numpy(x).float().cuda()
             if self.task.cfg.normalize:
                 x = F.layer_norm(x, x.shape)
+            print(x.shape)
             x = x.view(1, -1)
+            print(x.shape)
 
             feat = []
             for start in range(0, x.size(1), self.max_chunk):
-                x_chunk = x[:, start : start + self.max_chunk]
+                #x_chunk = x[:, start : start + self.max_chunk]
+                x_chunk = x
+                raw_len = x.shape[1]
+
+                print(x_chunk.shape)
                 feat_chunk, _ = self.model.extract_features(
                     source=x_chunk,
                     padding_mask=None,
@@ -67,6 +76,7 @@ class HubertFeatureReader(object):
                     output_layer=self.layer,
                 )
                 print(feat_chunk.shape)
+                exit()
                 self.model.skip_masked = True
                 feat_chunk2 = self.model.forward(
                     source=x_chunk,

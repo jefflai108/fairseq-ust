@@ -22,7 +22,7 @@ distributed_training:
   find_unused_parameters: true
 
 task:
-  _name: hubert_pretraining
+  _name: hubert_info_align_pretraining
   data: ???
   label_dir: ???
   labels: ???
@@ -42,13 +42,13 @@ dataset:
   validate_interval_updates: 10000
 
 criterion:
-  _name: hubert
+  _name: hubert_info_align
   pred_masked_weight: 1.0
   pred_nomask_weight: 0.0
   loss_weights: [10,]
 
 optimization:
-  max_update: 400000
+  max_update: 100000
   lr: [0.0005]
   clip_norm: 10.0
 
@@ -60,25 +60,25 @@ optimizer:
 
 lr_scheduler:
   _name: polynomial_decay
-  warmup_updates: 32000
+  warmup_updates: 8000
 
 model:
-  _name: hubert
+  _name: hubert_info_align
+  pretrained_hubert_ckpt: '/data/sls/temp/clai24/pretrained-models/mHuBERT/mhubert_base_vp_en_es_fr_it3.pt'
   label_rate: ???
-  skip_masked: false
-  skip_nomask: false
-  mask_prob: 0.80
+  mask_random: True 
+  hide_random: True 
+  mask_lengths: [5, 10, 15, 20]
+  hide_lengths: [5, 10, 15, 20]
+  num_mask_spans: [1, 2, 3]
+  num_hide_spans: [1, 2, 3]
+  mask_selection: 'static'
+  no_mask_overlap: True 
+  mask_min_space: 1
+  mask_channel_prob: 0.0
   extractor_mode: default
   conv_feature_layers: '[(512,10,5)] + [(512,3,2)] * 4 + [(512,2,2)] * 2'
   final_dim: 256
-  encoder_layerdrop: 0.05
-  dropout_input: 0.1
-  dropout_features: 0.1
-  dropout: 0.1
-  attention_dropout: 0.1
-  feature_grad_mult: 0.1
-  untie_final_proj: true
-  activation_dropout: 0.0
 
 hydra:
   job:

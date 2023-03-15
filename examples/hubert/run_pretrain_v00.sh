@@ -1,8 +1,18 @@
 #!/bin/bash
 
-expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/dummy
-[ -d $expdir ] && rm -r $expdir 
+expname=s2u_en.v00.100k.lr5e-4
+expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/${expname}
 mkdir -p $expdir
+LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/s2u_en-es
+TRAIN_SET=en_train
+VAL_SET=en_val
+
+############ DEBUG ##########
+#expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/dummy
+#LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/dummy
+#TRAIN_SET=es_dummy
+#VAL_SET=es_dummy
+#############################
 
 # set up environment variables for Torch DistributedDataParallel
 #WORLD_SIZE_JOB=\$SLURM_NTASKS
@@ -12,33 +22,30 @@ mkdir -p $expdir
 #MASTER_PORT_JOB="12234"
 #DDP_BACKEND=c10d
 
-# 1st iteration HuBERT pre-training (100k steps)
 HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cli/hydra_train.py \
     --config-dir /data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/config/pretrain \
-    --config-name dummy \
+    --config-name hubert_base_info_align_v00 \
     hydra.run.dir=${expdir} \
     common.log_file=train.log \
-    task.data=/data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/simple_kmeans \
-    task.label_dir=/data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/simple_kmeans \
+    task.data=${LAB_DIR} \
+    task.label_dir=${LAB_DIR} \
     task.labels=["km"] \
-    dataset.train_subset=es_dummy \
-    dataset.valid_subset=es_dummy \
+    dataset.train_subset=${TRAIN_SET} \
+    dataset.valid_subset=${VAL_SET} \
     dataset.num_workers=8 \
     checkpoint.keep_best_checkpoints=5 \
     model.label_rate=50 \
-    optimization.update_freq=[1] \
+    optimization.update_freq=[8] \
     optimization.max_update=100000 \
     lr_scheduler.warmup_updates=8000 \
-    distributed_training.distributed_world_size=1 \
-    distributed_training.nprocs_per_node=1 \
+    distributed_training.distributed_world_size=4 \
+    distributed_training.nprocs_per_node=4 \
     distributed_training.distributed_port=0 \
     2>&1 | tee ${expdir}/train.log
-
 
     # modify:
     #   distributed_training.distributed_world_size=4
     #   optimization.update_freq=[8] 
     #   distributed_training.nprocs_per_node=4
     # to stimulate 32 GPUs 
-
 
