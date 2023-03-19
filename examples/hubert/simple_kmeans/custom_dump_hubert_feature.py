@@ -37,7 +37,6 @@ class HubertFeatureReader(object):
         self.max_chunk = max_chunk
         self.feature_downsampling = 16000 / 50 
         logger.info(self.feature_downsampling)
-        exit()
         logger.info(f"TASK CONFIG:\n{self.task.cfg}")
         logger.info(f" max_chunk = {self.max_chunk}")
 
@@ -69,6 +68,9 @@ class HubertFeatureReader(object):
                 raw_len = x.shape[1]
 
                 print(x_chunk.shape)
+
+                self.model.get_shit()
+                exit()
                 feat_chunk, _ = self.model.extract_features(
                     source=x_chunk,
                     padding_mask=None,

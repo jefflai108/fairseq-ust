@@ -1,11 +1,18 @@
 #!/bin/bash
 
-########### DEBUG ##########
-expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/dummy
-LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/dummy
-TRAIN_SET=es_dummy
-VAL_SET=es_dummy
-############################
+expname=s2u_en.v00.scratchHubert.6LuDecoder.100k.lr5e-4
+expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/${expname}
+mkdir -p $expdir
+LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/s2u_en-es
+TRAIN_SET=en-train_mined_t1.09
+VAL_SET=en-valid_vp
+
+############ DEBUG ##########
+#expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/dummy
+#LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/dummy
+#TRAIN_SET=es_dummy
+#VAL_SET=es_dummy
+#############################
 
 # set up environment variables for Torch DistributedDataParallel
 #WORLD_SIZE_JOB=\$SLURM_NTASKS
@@ -15,6 +22,7 @@ VAL_SET=es_dummy
 #MASTER_PORT_JOB="12234"
 #DDP_BACKEND=c10d
 
+# reduce optimization.max_update=100k to 60k for faster model dev 
 HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cli/hydra_train.py \
     --config-dir /data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/config/pretrain \
     --config-name hubert_base_info_align_v00 \
@@ -27,12 +35,13 @@ HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cl
     dataset.valid_subset=${VAL_SET} \
     dataset.num_workers=8 \
     checkpoint.keep_best_checkpoints=5 \
+    model.pretrained_hubert_ckpt="" \
     model.label_rate=50 \
-    optimization.update_freq=[1] \
+    optimization.update_freq=[8] \
     optimization.max_update=100000 \
     lr_scheduler.warmup_updates=8000 \
-    distributed_training.distributed_world_size=1 \
-    distributed_training.nprocs_per_node=1 \
+    distributed_training.distributed_world_size=4 \
+    distributed_training.nprocs_per_node=4 \
     distributed_training.distributed_port=0 \
     2>&1 | tee ${expdir}/train.log
 

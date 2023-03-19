@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 def compute_mask_and_hide_indices(
     shape: Tuple[int, int],
     padding_mask: Optional[torch.Tensor],
-    mask_lengths: List[int],
-    hide_lengths: List[int],
+    mask_length_range: List[int],
+    hide_length_range: List[int],
     mask_type: str = "static",
     mask_random: bool = True, 
     hide_random: bool = True, 
@@ -79,10 +79,10 @@ def compute_mask_and_hide_indices(
             num_hide = 0
 
         # sample length of [MASK] and length of [HIDE]
-        if len(mask_lengths) > 0: 
-            mask_length = random.choice(mask_lengths) 
-        if len(hide_lengths) > 0:
-            hide_length = random.choice(hide_lengths)
+        if len(mask_length_range) > 0: 
+            mask_length = random.randint(mask_length_range[0], mask_length_range[1])
+        if len(hide_length_range) > 0:
+            hide_length = random.randint(hide_length_range[0], hide_length_range[1])
 
         #print(num_mask, num_hide)
         #print(mask_length, hide_length)
@@ -93,9 +93,9 @@ def compute_mask_and_hide_indices(
         else:
             raise Exception("unknown mask selection " + mask_type)
 
-        if len(mask_lengths) > 0 and sum(mask_lengths) == 0:
+        if len(mask_length_range) > 0 and sum(mask_length_range) == 0:
             mask_lengths[0] = min(mask_length, sz - 1)
-        if len(hide_lengths) > 0 and sum(hide_lengths) == 0:
+        if len(hide_length_range) > 0 and sum(hide_length_range) == 0:
             hide_lengths[0] = min(hide_length, sz - 1)
 
         # [MASK] and [HIDE] are either both at random or both pre-specified

@@ -8,7 +8,7 @@ common:
   tensorboard_logdir: tblog
 
 checkpoint:
-  save_interval_updates: 25000
+  save_interval_updates: 5000
   keep_interval_updates: 1
   no_epoch_checkpoints: true
 
@@ -39,13 +39,11 @@ dataset:
   max_tokens: 1400000
   skip_invalid_size_inputs_valid_test: true
   validate_interval: 5
-  validate_interval_updates: 10000
+  validate_interval_updates: 5000
 
 criterion:
   _name: hubert_info_align
   pred_masked_weight: 1.0
-  pred_nomask_weight: 0.0
-  loss_weights: [10,]
 
 optimization:
   max_update: 100000
@@ -64,14 +62,14 @@ lr_scheduler:
 
 model:
   _name: hubert_info_align
-  pretrained_hubert_ckpt: '/data/sls/temp/clai24/pretrained-models/mHuBERT/mhubert_base_vp_en_es_fr_it3.pt'
+  pretrained_hubert_ckpt: ???
   label_rate: ???
   mask_random: True 
   hide_random: True 
-  mask_lengths: [5, 10, 15, 20]
-  hide_lengths: [5, 10, 15, 20]
-  num_mask_spans: [1, 2, 3]
-  num_hide_spans: [1, 2, 3]
+  mask_lengths: [5, 50]
+  hide_lengths: [5, 50]
+  num_mask_spans: [1]
+  num_hide_spans: [1]
   mask_selection: 'static'
   no_mask_overlap: True 
   mask_min_space: 1
@@ -79,6 +77,24 @@ model:
   extractor_mode: default
   conv_feature_layers: '[(512,10,5)] + [(512,3,2)] * 4 + [(512,2,2)] * 2'
   final_dim: 256
+  decoder_encoder_embed_dim: 256
+  decoder_embed_dim: 256
+  decoder_ffn_embed_dim: 2048 
+  decoder_layers: 6
+  decoder_attention_heads: 8 
+  decoder_normalize_before: True 
+  decoder_learned_pos: False
+  share_decoder_input_output_embed: True 
+  no_token_positional_embeddings: False 
+  decoder_layerdrop: 0.0
+  decoder_output_dim: 256
+  decoder_input_dim: 256
+  decoder_dropout: 0.1
+  decoder_activation_dropout: 0.1
+  relu_dropout: 0.1
+  adaptive_softmax_dropout: 0.0
+  n_frames_per_step: 1
+
 
 hydra:
   job:

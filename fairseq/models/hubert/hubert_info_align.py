@@ -17,7 +17,16 @@ from fairseq import utils
 from fairseq.data.info_align_data_utils import compute_mask_and_hide_indices
 from fairseq.data.dictionary import Dictionary
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
-from fairseq.models import BaseFairseqModel, register_model
+from fairseq.models.fairseq_model import check_type
+from fairseq.models import (
+    BaseFairseqModel, 
+    FairseqEncoderDecoderModel,
+    FairseqDecoder, 
+    FairseqEncoder,
+    register_model,
+)
+from fairseq.models.speech_to_speech.modules import StackedEmbedding
+from fairseq.models.unit_to_unit.unit_decoder import TransformerUnitDecoder
 from fairseq.models.wav2vec.wav2vec2 import (
     EXTRACTOR_MODE_CHOICES,
     LAYER_TYPE_CHOICES,
@@ -27,8 +36,8 @@ from fairseq.models.wav2vec.wav2vec2 import (
 )
 from fairseq.models.hubert.hubert import (
     HubertConfig, 
+    HubertModel
 )
-from fairseq.modules import GradMultiply, LayerNorm
 from fairseq.tasks.hubert_info_align_pretraining import (
     HubertInfoAlignPretrainingConfig,
     HubertInfoAlignPretrainingTask,
@@ -39,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class HubertInfoAlignConfig(HubertConfig):
-    # additional model arguments 
+    # Hubert encoder init ckpt 
     pretrained_hubert_ckpt: str = field(
         default="", 
         metadata={
@@ -48,6 +57,7 @@ class HubertInfoAlignConfig(HubertConfig):
         },
     )
 
+    # Hubert encoder masking params
     mask_lengths: List[int] = field(default_factory=list, metadata={"help": "[MASK] mask length"})
     hide_lengths: List[int] = field(default_factory=list, metadata={"help": "[HIDE] mask length"})
     mask_random: bool = field(
@@ -67,47 +77,104 @@ class HubertInfoAlignConfig(HubertConfig):
         metadata={"help": "number of [HIDE] spans, where each span is of hide_length"}
     )
 
+    # AR unit decoder params  --> add these to config.yaml 
+    decoder_encoder_embed_dim: int = field(
+        default=256,
+        metadata={"help": "decoder embedding dimension"},
+    )
+    decoder_embed_dim: int = field(
+        default=256,
+        metadata={"help": "decoder embedding dimension"},
+    )
+    decoder_ffn_embed_dim: int = field(
+        default=2048, 
+        metadata={"help": "decoder embedding dimension for FFN"},
+    )
+    decoder_layers: int = field(
+        default=6,
+        metadata={"help": "num decoder layers"},
+    )
+    decoder_attention_heads: int = field(
+        default=8, 
+        metadata={"help": "num decoder attention heads"},
+    )
+    decoder_normalize_before: bool = field(
+        default=True,
+        metadata={"help": "apply layernorm before each decoder block"}, 
+    )
+    decoder_learned_pos: bool = field(
+        default=False, 
+    )
+    share_decoder_input_output_embed: bool = field(
+        default=True, 
+    )
+    no_token_positional_embeddings: bool = field(
+        default=False
+    )
+    decoder_layerdrop: float = field(
+        default=0.0
+    )
+    decoder_output_dim: int = field(
+        default=256
+    )
+    decoder_input_dim: int = field(
+        default=256
+    )
+    decoder_dropout: float = field(
+        default=0.1
+    )
+    decoder_activation_dropout: float = field(
+        default=0.1
+    )
+    relu_dropout: float = field(
+        default=0.1
+    )
+    adaptive_softmax_dropout: float = field(
+        default=0.0
+    )
+    n_frames_per_step: int = field(
+        default=1
+    )
+
 @register_model("hubert_info_align", dataclass=HubertInfoAlignConfig)
 class HubertInfoAlignModel(BaseFairseqModel):
     def __init__(
         self,
+        hubert_encoder: HubertModel, 
+        unit_decoder: TransformerUnitDecoder, 
         cfg: HubertInfoAlignConfig,
         task_cfg: HubertInfoAlignPretrainingConfig,
-        dictionaries: List[Dictionary],
+        tgt_dict: Dictionary,
     ) -> None:
-        super().__init__()
         logger.info(f"HubertInfoAlignModel Config: {cfg}")
-        
-        self.load_pretrained_hubert_ckpt(cfg.pretrained_hubert_ckpt)
 
-        self.model.train().cuda()
+        super().__init__()
 
+        self.tgt_dict = tgt_dict
+
+        # init encoder and decoder 
+        self.encoder = hubert_encoder
+        self.decoder = unit_decoder
+
+        check_type(self.encoder, HubertModel)
+        check_type(self.decoder, FairseqDecoder)
+
+        self.encoder.train().cuda()
+        self.decoder.train().cuda()
+
+        # set CNN feature extractor to non-finetunable
+        for param in self.encoder.feature_extractor.parameters():
+            param.requires_grad_(False)
         feature_enc_layers = eval(cfg.conv_feature_layers)  # noqa
-        #self.feature_extractor = ConvFeatureExtractionModel(
-        #    conv_layers=feature_enc_layers,
-        #    dropout=0.0,
-        #    mode=cfg.extractor_mode,
-        #    conv_bias=cfg.conv_bias,
-        #)
         feature_ds_rate = np.prod([s for _, _, s in feature_enc_layers])
         self.feat2tar_ratio = cfg.label_rate * feature_ds_rate / task_cfg.sample_rate
 
-        final_dim = cfg.final_dim if cfg.final_dim > 0 else cfg.encoder_embed_dim
-        num_class = dictionaries[0].__len__()
-        self.pred_proj = nn.Linear(final_dim, num_class)
-        nn.init.uniform_(self.pred_proj.weight, a=-0.0, b=1.0)
-        nn.init.constant_(self.pred_proj.bias, 0.0)
-
         # learnable [MASK] and [HIDE] masks
-        self.mask_emb = self.model.mask_emb
+        self.mask_emb = self.encoder.mask_emb
         self.hide_emb = nn.Parameter(
-            torch.FloatTensor(cfg.encoder_embed_dim).uniform_()
+            torch.FloatTensor(self.mask_emb.size()[0]).uniform_()
         )
         self.hide_emb = self.hide_emb
-
-        # set feature extractor to non-finetunable
-        for param in self.model.feature_extractor.parameters():
-            param.requires_grad_(False)
 
         # override the pretrained Hubert's masking parameters 
         self.mask_lengths = cfg.mask_lengths
@@ -119,18 +186,50 @@ class HubertInfoAlignModel(BaseFairseqModel):
         self.num_mask_spans = cfg.num_mask_spans
         self.num_hide_spans = cfg.num_hide_spans
 
-    def load_pretrained_hubert_ckpt(self, ckpt_str): 
+    @classmethod
+    def build_model(cls, cfg: HubertInfoAlignConfig, task: HubertInfoAlignPretrainingTask):
+        
+        assert len(task.dictionaries) == 1
+        tgt_dict = task.dictionaries[0]
+
+        # Hubert encoder 
+        encoder = cls.build_encoder(cfg.pretrained_hubert_ckpt, cfg, task.cfg, tgt_dict)
+
+        # Autoregressive unit decoder 
+        cfg.encoder_embed_dim = cfg.decoder_encoder_embed_dim
+        cfg.dropout = cfg.decoder_dropout
+        cfg.activation_dropout = cfg.decoder_activation_dropout
+        decoder = cls.build_decoder(cfg, tgt_dict)
+
+        # HubertInfoAlign model 
+        base_model = HubertInfoAlignModel(encoder, 
+                                          decoder, 
+                                          cfg, 
+                                          task.cfg, 
+                                          tgt_dict)
+
+        return base_model
+
+    @classmethod
+    def build_encoder(cls, ckpt_str, cfg, task_cfg, tgt_dict):
+        encoder = cls.load_pretrained_hubert_ckpt(ckpt_str, cfg, task_cfg, tgt_dict)
+        return encoder
+
+    @classmethod
+    def load_pretrained_hubert_ckpt(cls, ckpt_str, cfg, task_cfg, tgt_dict): 
         """load a pretrained Hubert seed model for info-align pretraining"""
         import fairseq.checkpoint_utils, sys 
         if ckpt_str == "":
-            raise Exception("pretrained Hubert ckpt not provided")
+            logger.info("Initialize from a HubertModel from scratch")
+            return HubertModel(cfg, task_cfg, [tgt_dict])
         else:
+            logger.info(f"Initialize from a pretrained HubertModel at {ckpt_str}")
             (
                 model,
                 cfg,
                 task,
             ) = fairseq.checkpoint_utils.load_model_ensemble_and_task([ckpt_str])
-            self.model = model[0]
+            return model[0]
 
     def upgrade_state_dict_named(self, state_dict, name):
         """Upgrade a (possibly old) state dict for new versions of fairseq."""
@@ -139,16 +238,25 @@ class HubertInfoAlignModel(BaseFairseqModel):
         return state_dict
 
     @classmethod
-    def build_model(cls, cfg: HubertInfoAlignConfig, task: HubertInfoAlignPretrainingTask):
-        """Build a new model instance."""
+    def build_decoder(cls, cfg, tgt_dict):
+        num_embeddings = len(tgt_dict)
+        padding_idx = tgt_dict.pad()
+        embed_tokens = StackedEmbedding(
+            num_embeddings,
+            cfg.decoder_embed_dim,
+            padding_idx,
+            num_stacked=cfg.n_frames_per_step,
+        )
 
-        model = HubertInfoAlignModel(cfg, task.cfg, task.dictionaries)
-        return model
+        return TransformerUnitDecoder(
+            cfg,
+            tgt_dict,
+            embed_tokens,
+        )
 
-    def apply_mask_and_hide(self, 
+    def apply_encoder_mask_and_hide(self, 
                    x, 
                    padding_mask, 
-                   target_list, 
                    mask_span_selected=(0, 0), 
                    hide_span_selected=(0, 0), 
                   ):
@@ -195,88 +303,126 @@ class HubertInfoAlignModel(BaseFairseqModel):
         else: 
             return x, None, None 
 
-    #def compute_nce(self, x, pos, negs):
-    #    neg_is_pos = (pos == negs).all(-1)
-    #    pos = pos.unsqueeze(0)
-    #    targets = torch.cat([pos, negs], dim=0)
+    def forward(
+        self,
+        source: torch.Tensor, 
+        prev_output_tokens: torch.Tensor, 
+        target_list: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        mask: bool = True,
+        output_layer: Optional[int] = None,
+    ):
+        assert target_list is None or len(target_list) == 1
+        target = target_list[0]
 
-    #    logits = torch.cosine_similarity(x.float(), targets.float(), dim=-1).type_as(x)
-    #    logits /= self.logit_temp
-    #    if neg_is_pos.any():
-    #        logits[1:][neg_is_pos] = float("-inf")
-    #    logits = logits.transpose(0, 1)  # (num_x, num_cls+1)
-    #    return logits
+        # forward encoder 
+        encoder_out = self.forward_encoder(
+            source, 
+            target, 
+            padding_mask, 
+            mask, 
+            output_layer
+        )
+ 
+        # determine [MASK] regions
+        masked_indices = torch.logical_and(~encoder_out["encoder_padding_mask"][0], 
+                                            encoder_out["mask_indices"][0])
+        bsz = prev_output_tokens.shape[0]
+        max_masked_len = self.mask_lengths[-1] * max(self.num_mask_spans)
+        masked_prev_output_tokens = torch.full((bsz, max_masked_len), self.tgt_dict.pad()).to(prev_output_tokens)
+        for i in range(bsz): 
+            masked_idx = masked_indices[i]
+            masked_unit_seq = prev_output_tokens[i][masked_idx]
+            masked_prev_output_tokens[i][: len(masked_unit_seq)] = masked_unit_seq
+        
+        # forward decoder 
+        # IMPORTANT: only feed the decoder the [MASK] unit seq instead of the full unit seq!
+        decoder_out, _ = self.decoder(
+            masked_prev_output_tokens,
+            encoder_out=encoder_out,
+        )
+        #print(decoder_out.shape) # torch.Size([4, 50, 1004])
+        #print(masked_prev_output_tokens.shape) # torch.Size([4, 50])
 
-    def forward_features(self, source: torch.Tensor) -> torch.Tensor:
+        # compute logprob on [MASK] regions
+        logit_m = decoder_out[masked_prev_output_tokens != self.tgt_dict.pad()]
+        #print(logit_m.shape) # torch.Size([133, 1004])
+
+        target_list_m = encoder_out["target"][masked_indices]
+        #print(target_list_m.shape) # torch.Size([133])
+
+        result = {
+            "logit_m_list": [logit_m],
+            "target_list": [target_list_m], 
+        }
+        return result
+
+    def forward_encoder_features(self, source: torch.Tensor) -> torch.Tensor:
         with torch.no_grad(): 
-            features = self.model.feature_extractor(source)
+            features = self.encoder.feature_extractor(source)
             
         return features
 
     def forward_targets(
         self,
         features: torch.Tensor,
-        target_list: List[torch.Tensor],
+        target: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Trim features to ensure labels exist and then get aligned labels
-        features, target_list = self.model.forward_targets(features, target_list)
+        features, target_list = self.encoder.forward_targets(features, [target])
 
-        return features, target_list
+        return features, target_list[0]
 
-    def forward_padding_mask(
+    def forward_encoder_padding_mask(
         self,
         features: torch.Tensor,
         padding_mask: torch.Tensor,
     ) -> torch.Tensor:
 
-        padding_mask = self.model.forward_padding_mask(features, padding_mask)
+        padding_mask = self.encoder.forward_padding_mask(features, padding_mask)
 
         return padding_mask
 
-    def forward(
+    def forward_encoder(
         self,
         source: torch.Tensor,
-        target_list: Optional[List[torch.Tensor]] = None,
+        target: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
         mask: bool = True,
-        features_only: bool = False,
         output_layer: Optional[int] = None,
     ) -> Dict[str, torch.Tensor]:
-        """output layer is 1-based"""
-
-        assert target_list is None or len(target_list) == 1
 
         #print(source.shape) # torch.Size([4, 67200])
-        #print(target_list[0].shape) # torch.Size([4, 209])
-        features = self.forward_features(source)
+        #print(target.shape) # torch.Size([4, 209])
+        features = self.forward_encoder_features(source)
         #print(features.shape) # torch.Size([4, 512, 209])
-        if target_list is not None:
-            features, target_list = self.forward_targets(features, target_list)
+        if target is not None:
+            features, target = self.forward_targets(features, target)
 
         #print(features.shape) # torch.Size([4, 512, 209])
-        #print(target_list[0].shape) # torch.Size([4, 209])
+        #print(target.shape) # torch.Size([4, 209])
         #print(padding_mask)
         #print(padding_mask.shape) # torch.Size([4, 67200])
         #print(mask) # True 
         #print(output_layer) # None
 
         features = features.transpose(1, 2) # torch.Size([4, 209, 512])
-        features = self.model.layer_norm(features)
+        features = self.encoder.layer_norm(features)
 
         if padding_mask is not None:
-            padding_mask = self.forward_padding_mask(features, padding_mask)
+            padding_mask = self.forward_encoder_padding_mask(features, padding_mask)
 
         #print(padding_mask.shape) # torch.Size([4, 209])
         #print(padding_mask)
 
-        if self.model.post_extract_proj is not None:
-            features = self.model.post_extract_proj(features)
+        if self.encoder.post_extract_proj is not None:
+            features = self.encoder.post_extract_proj(features)
         #print(features.shape) # torch.Size([4, 209, 768])
 
-        features = self.model.dropout_input(features)
+        features = self.encoder.dropout_input(features)
 
         if mask:
-            x, mask_indices, hide_indices = self.apply_mask_and_hide(features, padding_mask, target_list)
+            x, mask_indices, hide_indices = self.apply_encoder_mask_and_hide(features, padding_mask)
         else:
             x = features
             mask_indices = None
@@ -287,48 +433,28 @@ class HubertInfoAlignModel(BaseFairseqModel):
         # x: (B, T, D), float
         # padding_mask: (B, T), bool
         # mask_indices: (B, T), bool
-        x, _ = self.model.encoder(
+        x, _ = self.encoder.encoder(
             x,
             padding_mask=padding_mask,
             layer=None if output_layer is None else output_layer - 1,
         )
         
-        if features_only:
-            return {"x": x, 
-                    "padding_mask": padding_mask, 
-                    "features": features}
-        
-        #def compute_pred(proj_x, target, label_embs):
-        #    # compute logits for the i-th label set
-        #    y = torch.index_select(label_embs, 0, target.long())
-        #    negs = label_embs.unsqueeze(1).expand(-1, proj_x.size(0), -1)
-        #    if self.target_glu:
-        #        y = self.target_glu(y)
-        #        negs = self.target_glu(negs)
-        #    return self.compute_nce(proj_x, y, negs)
-
-        # predict [MASK] spans 
-        masked_indices = torch.logical_and(~padding_mask, mask_indices)
         #print(x.shape) # torch.Size([4, 209, 768])
-        #print(masked_indices.shape) # torch.Size([4, 209])
-        #print(x[masked_indices].shape) # torch.Size([60, 768])
-        proj_x_m = self.model.final_proj(x[masked_indices])
-        logit_m = self.pred_proj(proj_x_m)
+        proj_x = self.encoder.final_proj(x) # D: 768 --> 256
+        proj_x = proj_x.transpose(0, 1)
+        features = features.transpose(0, 1)
 
-        #print(masked_indices[0])
-        #print(logit_m.shape) # torch.Size([60, 1004])
-        #print(proj_x_m.shape) # torch.Size([60, 256])
-
-        #print(target_list[0].shape) # torch.Size([4, 209])
-        masked_target_list = target_list[0][masked_indices]
-        #print(masked_target_list.shape) # torch.Size([60])
+        #print(proj_x.shape) # torch.Size([209, 4, 256])
+        #print(features.shape) # torch.Size([209, 4, 768])
         
-        result = {
-            "logit_m_list": [logit_m],
-            "target_list": [masked_target_list], 
-            "padding_mask": padding_mask,
-        }
-        return result
+        return {
+                "encoder_out": [proj_x],  # T x B x C
+                "encoder_padding_mask": [padding_mask] if padding_mask is not None else [],  # B x T
+                "mask_indices": [mask_indices] if mask_indices is not None else [], # B x T
+                "hide_indices": [hide_indices] if hide_indices is not None else [], # B x T
+                "features": features, # T x B x C
+                "target": target, # B x T
+                }
 
     def extract_features(
         self,
@@ -338,15 +464,14 @@ class HubertInfoAlignModel(BaseFairseqModel):
         ret_conv: bool = False,
         output_layer: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        res = self.forward(
+        res = self.forward_encoder(
             source,
             padding_mask=padding_mask,
             mask=mask,
-            features_only=True,
             output_layer=output_layer,
         )
-        feature = res["features"] if ret_conv else res["x"]
-        return feature, res["padding_mask"]
+        feature = res["features"] if ret_conv else res["encoder_out"]
+        return feature, res["encoder_padding_mask"]
 
     def get_logits(self, net_output):
         logits_list = net_output["logit_m_list"]
@@ -357,10 +482,4 @@ class HubertInfoAlignModel(BaseFairseqModel):
         targets_list = net_output["target_list"]
         targets_list = [x.type(torch.LongTensor) for x in targets_list]
         return targets_list
-
-    def get_extra_losses(self, net_output):
-        extra_losses = []
-        names = []
-
-        return extra_losses, names
 

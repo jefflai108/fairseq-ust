@@ -7,6 +7,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional
+import copy
 
 import torch
 import torch.nn.functional as F
@@ -21,14 +22,6 @@ class HubertInfoAlignCriterionConfig(FairseqDataclass):
         default=1.0,
         metadata={"help": "weight for predictive loss for masked frames"},
     )
-    pred_nomask_weight: float = field(
-        default=0.0,
-        metadata={"help": "weight for predictive loss for unmasked frames"},
-    )
-    loss_weights: Optional[List[float]] = field(
-        default=None,
-        metadata={"help": "weights for additional loss terms (not first one)"},
-    )
     log_keys: List[str] = field(
         default_factory=lambda: [],
         metadata={"help": "output keys to log"},
@@ -41,15 +34,14 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         self,
         task,
         pred_masked_weight,
-        pred_nomask_weight,
-        loss_weights=None,
         log_keys=None,
     ):
         super().__init__(task)
         self.pred_masked_weight = pred_masked_weight
-        self.pred_nomask_weight = pred_nomask_weight
-        self.loss_weights = loss_weights
         self.log_keys = [] if log_keys is None else log_keys
+
+        self.eos_idx = 2
+        self.pad_idx = 1
 
     def forward(self, model, sample, reduce=True, log_pred=False):
         """Compute the loss for the given sample.
@@ -58,7 +50,13 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         2) the sample size, which is used as the denominator for the gradient
         3) logging outputs to display while training
         """
-        net_output = model(target_list=sample["target_list"], **sample["net_input"], features_only=False)
+        # construct prev_output_tokens from targets for teacher-forcing
+        prev_output_tokens = torch.full_like(sample["target_list"][0], self.pad_idx)
+        prev_output_tokens[:, 0].fill_(self.eos_idx)
+        prev_output_tokens[:, 1:] = copy.deepcopy(sample["target_list"][0][:, :-1])
+
+        # model forward
+        net_output = model(target_list=sample["target_list"], prev_output_tokens=prev_output_tokens, **sample["net_input"])
         loss = 0.0
         sample_size = 0
         logging_output = {}
@@ -67,8 +65,6 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         loss_m_list = []
         logp_m_list = model.get_logits(net_output)
         targ_m_list = model.get_targets(net_output)
-        #print(logp_m_list[0])
-        #print(targ_m_list[0])
 
         assert self.pred_masked_weight == 1.0 and len(logp_m_list) > 0
 
@@ -81,23 +77,6 @@ class HubertInfoAlignCriterion(FairseqCriterion):
             loss += self.pred_masked_weight * sum(loss_m_list)
             sample_size += targ_m_list[0].numel()
 
-        if self.loss_weights is not None:
-            assert hasattr(model, "get_extra_losses")
-            extra_losses, names = model.get_extra_losses(net_output)
-            if torch.is_tensor(extra_losses):
-                extra_losses = [extra_losses]
-                names = [names]
-            if len(self.loss_weights) == 1 and len(extra_losses) != 1:
-                self.loss_weights = [self.loss_weights[0]] * len(extra_losses)
-            assert len(extra_losses) == len(
-                self.loss_weights
-            ), f"{len(extra_losses)}, {len(self.loss_weights)}"
-            for p, n, coef in zip(extra_losses, names, self.loss_weights):
-                if coef != 0 and p is not None:
-                    p = coef * p.float() * sample_size
-                    loss += p
-                    logging_output[f"loss_{n}"] = p.item()
-
         logging_output = {
             "loss": loss.item() if reduce else loss,
             "ntokens": sample_size,
@@ -109,18 +88,6 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         for lk in self.log_keys:
             if lk in net_output:
                 logging_output[lk] = float((net_output[lk]))
-
-        #def compute_correct(logits):
-        #    if logits.numel() == 0:
-        #        return 0, 0
-        #    else:
-        #        assert logits.dim() > 1, logits.shape
-        #        max = logits.argmax(-1) == 0
-        #        min = logits.argmin(-1) == 0
-        #        both = max & min
-        #        corr = max.long().sum().item() - both.long().sum().item()
-        #        count = max.numel()
-        #        return corr, count
 
         with torch.no_grad():
             for i, (logp_m, targ_m) in enumerate(zip(logp_m_list, targ_m_list)):
