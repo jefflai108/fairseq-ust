@@ -40,8 +40,8 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         self.pred_masked_weight = pred_masked_weight
         self.log_keys = [] if log_keys is None else log_keys
 
-        self.eos_idx = 2
-        self.pad_idx = 1
+        self.eos_idx = task.dictionaries[0].eos()
+        self.pad_idx = task.dictionaries[0].pad()
 
     def forward(self, model, sample, reduce=True, log_pred=False):
         """Compute the loss for the given sample.

@@ -136,8 +136,8 @@ class HubertInfoAlignConfig(HubertConfig):
         default=1
     )
 
-@register_model("hubert_info_align", dataclass=HubertInfoAlignConfig)
-class HubertInfoAlignModel(BaseFairseqModel):
+@register_model("hubert_info_align_decode", dataclass=HubertInfoAlignConfig)
+class HubertInfoAlignDecodeModel(BaseFairseqModel):
     def __init__(
         self,
         hubert_encoder: HubertModel, 
@@ -146,90 +146,53 @@ class HubertInfoAlignModel(BaseFairseqModel):
         task_cfg: HubertInfoAlignPretrainingConfig,
         tgt_dict: Dictionary,
     ) -> None:
-        logger.info(f"HubertInfoAlignModel Config: {cfg}")
+        logger.info(f"HubertInfoAlignDecodeModel Config: {cfg}")
 
         super().__init__()
 
-        self.tgt_dict = tgt_dict
-
-        # init encoder and decoder 
-        self.encoder = hubert_encoder
-        self.decoder = unit_decoder
-
-        check_type(self.encoder, HubertModel)
-        check_type(self.decoder, FairseqDecoder)
-
-        self.encoder.train().cuda()
-        self.decoder.train().cuda()
-
-        # set CNN feature extractor to non-finetunable
-        for param in self.encoder.feature_extractor.parameters():
-            param.requires_grad_(False)
-        feature_enc_layers = eval(cfg.conv_feature_layers)  # noqa
-        feature_ds_rate = np.prod([s for _, _, s in feature_enc_layers])
-        self.feat2tar_ratio = cfg.label_rate * feature_ds_rate / task_cfg.sample_rate
-
-        # learnable [MASK] and [HIDE] masks
-        self.mask_emb = self.encoder.mask_emb
-        self.hide_emb = nn.Parameter(
-            torch.FloatTensor(self.mask_emb.size()[0]).uniform_()
-        )
-        self.hide_emb = self.hide_emb
-
-        # override the pretrained Hubert's masking parameters 
-        self.mask_lengths = cfg.mask_lengths
-        self.hide_lengths = cfg.hide_lengths
-        self.no_mask_overlap = cfg.no_mask_overlap
-        self.mask_min_space = cfg.mask_min_space
-        self.mask_random = cfg.mask_random
-        self.hide_random = cfg.hide_random
-        self.num_mask_spans = cfg.num_mask_spans
-        self.num_hide_spans = cfg.num_hide_spans
+        ## override the pretrained Hubert's masking parameters 
+        #self.mask_lengths = cfg.mask_lengths
+        #self.hide_lengths = cfg.hide_lengths
+        #self.no_mask_overlap = cfg.no_mask_overlap
+        #self.mask_min_space = cfg.mask_min_space
+        #self.mask_random = cfg.mask_random
+        #self.hide_random = cfg.hide_random
+        #self.num_mask_spans = cfg.num_mask_spans
+        #self.num_hide_spans = cfg.num_hide_spans
 
     @classmethod
     def build_model(cls, cfg: HubertInfoAlignConfig, task: HubertInfoAlignPretrainingTask):
+        """ overwrite original build_model() by directly loading a trained ckpt """
         
         assert len(task.dictionaries) == 1
         tgt_dict = task.dictionaries[0]
 
-        # Hubert encoder 
-        encoder = cls.build_encoder(cfg.pretrained_hubert_ckpt, cfg, task.cfg, tgt_dict)
-
-        # Autoregressive unit decoder 
-        cfg.encoder_embed_dim = cfg.decoder_encoder_embed_dim
-        cfg.dropout = cfg.decoder_dropout
-        cfg.activation_dropout = cfg.decoder_activation_dropout
-        decoder = cls.build_decoder(cfg, tgt_dict)
-
-        # HubertInfoAlign model 
-        base_model = HubertInfoAlignModel(encoder, 
-                                          decoder, 
-                                          cfg, 
-                                          task.cfg, 
-                                          tgt_dict)
-
-        return base_model
-
-    @classmethod
-    def build_encoder(cls, ckpt_str, cfg, task_cfg, tgt_dict):
-        encoder = cls.load_pretrained_hubert_ckpt(ckpt_str, cfg, task_cfg, tgt_dict)
-        return encoder
-
-    @classmethod
-    def load_pretrained_hubert_ckpt(cls, ckpt_str, cfg, task_cfg, tgt_dict): 
-        """load a pretrained Hubert seed model for info-align pretraining"""
         import fairseq.checkpoint_utils, sys 
-        if ckpt_str == "":
-            logger.info("Initialize from a HubertModel from scratch")
-            return HubertModel(cfg, task_cfg, [tgt_dict])
-        else:
-            logger.info(f"Initialize from a pretrained HubertModel at {ckpt_str}")
-            (
-                model,
-                cfg,
-                task,
-            ) = fairseq.checkpoint_utils.load_model_ensemble_and_task([ckpt_str])
-            return model[0]
+        if cfg.pretrained_hubert_ckpt == "":
+            raise Exception("Failed to provide trained model ckpt.")
+
+        (
+            model,
+            cfg,
+            task,
+        ) = fairseq.checkpoint_utils.load_model_ensemble_and_task([cfg.pretrained_hubert_ckpt])
+
+        return model[0]
+
+        ## Autoregressive unit decoder 
+        #cfg.encoder_embed_dim = cfg.decoder_encoder_embed_dim
+        #cfg.dropout = cfg.decoder_dropout
+        #cfg.activation_dropout = cfg.decoder_activation_dropout
+        #decoder = cls.build_decoder(cfg, tgt_dict)
+
+        ## HubertInfoAlign model 
+        #base_model = HubertInfoAlignDecodeModel(encoder, 
+        #                                  decoder, 
+        #                                  cfg, 
+        #                                  task.cfg, 
+        #                                  tgt_dict)
+
+        #return base_model
 
     def upgrade_state_dict_named(self, state_dict, name):
         """Upgrade a (possibly old) state dict for new versions of fairseq."""
@@ -257,24 +220,24 @@ class HubertInfoAlignModel(BaseFairseqModel):
     def apply_encoder_mask_and_hide(self, 
                    x, 
                    padding_mask, 
-                   mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
-                   hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+                   mask_span_selected=(0, 0), 
+                   hide_span_selected=(0, 0), 
                   ):
         """compute and apply [MASK] and [HIDE] spans to x. 
         The spans can be sampled at random or pre-specified, and in 
         either way, no two spans overlap. 
 
         Exmaples of pre-specifying [MASK] and [HIDE] spans:
-            mask_span_selected = [(2, 10), (67, 98)]
-            hide_span_selected = [(21, 45)]
+            mask_span_selected = (67, 98) 
+            hide_span_selected = (1, 45)
         """
         
         B, T, C = x.shape
         mask_indices, hide_indices = None, None
         if (len(self.num_mask_spans) > 0 or 
             len(self.hide_mask_spans) > 0 or 
-            mask_span_selected != [(0, 0)] or 
-            hide_span_selected != [(0, 0)]
+            mask_span_selected != (0, 0) or 
+            hide_span_selected != (0, 0)
             ):
             mask_indices, hide_indices = compute_mask_and_hide_indices(
                 (B, T),
@@ -311,8 +274,6 @@ class HubertInfoAlignModel(BaseFairseqModel):
         padding_mask: Optional[torch.Tensor] = None,
         mask: bool = True,
         output_layer: Optional[int] = None,
-        mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
-        hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
     ):
         assert target_list is None or len(target_list) == 1
         target = target_list[0]
@@ -323,9 +284,7 @@ class HubertInfoAlignModel(BaseFairseqModel):
             target, 
             padding_mask, 
             mask, 
-            output_layer, 
-            mask_span_selected, 
-            hide_span_selected,
+            output_layer
         )
  
         # determine [MASK] regions
@@ -457,13 +416,12 @@ class HubertInfoAlignModel(BaseFairseqModel):
         padding_mask: Optional[torch.Tensor] = None,
         mask: bool = True,
         output_layer: Optional[int] = None,
-        mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
-        hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
     ) -> Dict[str, torch.Tensor]:
 
-        #print(source.shape) # torch.Size([4, 67200])
-        #print(target.shape) # torch.Size([4, 209])
-        #print(padding_mask.shape)
+        print(source.shape) # torch.Size([4, 67200])
+        print(target.shape) # torch.Size([4, 209])
+        print(padding_mask)
+        exit()
         features = self.forward_encoder_features(source)
         #print(features.shape) # torch.Size([4, 512, 209])
         if target is not None:
@@ -493,7 +451,7 @@ class HubertInfoAlignModel(BaseFairseqModel):
 
 
         if mask:
-            x, mask_indices, hide_indices = self.apply_encoder_mask_and_hide(features, padding_mask, mask_span_selected, hide_span_selected)
+            x, mask_indices, hide_indices = self.apply_encoder_mask_and_hide(features, padding_mask)
         else:
             x = features
             mask_indices = None

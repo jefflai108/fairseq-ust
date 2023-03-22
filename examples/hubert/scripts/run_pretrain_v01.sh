@@ -1,6 +1,6 @@
 #!/bin/bash
 
-expname=s2u_en.v00.pretrainedmHubert.6LuDecoder.100k.lr5e-4
+expname=s2u_en.v01.pretrainedmHubert.6LuDecoder.100k.lr5e-4
 expdir=/data/sls/scratch/clai24/lexicon/exp/hubert_pretraining/${expname}
 mkdir -p $expdir
 LAB_DIR=/data/sls/scratch/clai24/lexicon/exp/hubert_kmeans/s2u_en-es
@@ -25,7 +25,7 @@ VAL_SET=en-valid_vp
 # reduce optimization.max_update=100k to 60k for faster model dev 
 HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cli/hydra_train.py \
     --config-dir /data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/config/pretrain \
-    --config-name hubert_base_info_align_v00 \
+    --config-name hubert_base_info_align_v01 \
     hydra.run.dir=${expdir} \
     common.log_file=train.log \
     task.data=${LAB_DIR} \
@@ -38,7 +38,7 @@ HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cl
     model.pretrained_hubert_ckpt=/data/sls/temp/clai24/pretrained-models/mHuBERT/mhubert_base_vp_en_es_fr_it3.pt \
     model.label_rate=50 \
     optimization.update_freq=[8] \
-    optimization.max_update=200000 \
+    optimization.max_update=100000 \
     lr_scheduler.warmup_updates=8000 \
     distributed_training.distributed_world_size=4 \
     distributed_training.nprocs_per_node=4 \

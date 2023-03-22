@@ -6,3 +6,4 @@
 from .hubert import *  # noqa
 from .hubert_asr import *  # noqa
 from .hubert_info_align import *
+from .hubert_info_align_decode import *

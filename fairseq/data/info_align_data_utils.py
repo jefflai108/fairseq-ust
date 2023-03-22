@@ -23,8 +23,8 @@ def compute_mask_and_hide_indices(
     mask_type: str = "static",
     mask_random: bool = True, 
     hide_random: bool = True, 
-    mask_span_selected: Tuple[int, int] = (0, 0), 
-    hide_span_selected: Tuple[int, int] = (0, 0),
+    mask_span_selected: List[Tuple[int, int]] = (0, 0), 
+    hide_span_selected: List[Tuple[int, int]] = (0, 0),
     num_mask_spans: List[int] = [1], 
     num_hide_spans: List[int] = [1], 
     no_overlap: bool = False,
@@ -101,12 +101,11 @@ def compute_mask_and_hide_indices(
         # [MASK] and [HIDE] are either both at random or both pre-specified
         # If specified, they should not overlap. 
         assert mask_random == hide_random 
-        if mask_span_selected != (0, 0): 
-            assert hide_span_selected != (0, 0)
-            assert mask_span_selected != hide_span_selected
+        if mask_span_selected != [(0, 0)]: 
+            assert not any(x in mask_span_selected for x in hide_span_selected)
 
         # [MASK] span selection
-        if mask_random and mask_span_selected == (0, 0):
+        if mask_random and mask_span_selected == [(0, 0)]:
             mask_idc = []
 
             def arrange(s, e, length, keep_length):
@@ -135,10 +134,12 @@ def compute_mask_and_hide_indices(
                 s, e = mask_parts.pop(c)
                 mask_parts.extend(arrange(s, e, length, min_mask_length))
         else: 
-            mask_idc = [i for i in range(mask_span_selected[0], mask_span_selected[1] + 1)]
+            mask_idc = []
+            for _mask_span_selected in mask_span_selected: 
+                mask_idc.extend([i for i in range(_mask_span_selected[0], _mask_span_selected[1] + 1)])
 
         # [HIDE] span selection
-        if hide_random and hide_span_selected == (0, 0):
+        if hide_random and hide_span_selected == [(0, 0)]:
             hide_idc = []
 
             def arrange(s, e, length, keep_length):
@@ -167,7 +168,9 @@ def compute_mask_and_hide_indices(
                 s, e = hide_parts.pop(c)
                 hide_parts.extend(arrange(s, e, length, min_hide_length))
         else: 
-            hide_idc = [i for i in range(hide_span_selected[0], hide_span_selected[1] + 1)]
+            hide_idc = []
+            for _hide_span_selected in hide_span_selected: 
+                hide_idc.extend([i for i in range(_hide_span_selected[0], _hide_span_selected[1] + 1)])
 
         mask_idc = np.asarray(mask_idc)
         hide_idc = np.asarray(hide_idc)
