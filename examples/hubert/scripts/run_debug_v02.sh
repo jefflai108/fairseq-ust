@@ -18,7 +18,7 @@ mkdir -p $expdir
 
 HYDRA_FULL_ERROR=1 python -u /data/sls/scratch/clai24/lexicon/fairseq/fairseq_cli/hydra_train.py \
     --config-dir /data/sls/scratch/clai24/lexicon/fairseq/examples/hubert/config/pretrain \
-    --config-name hubert_base_info_align_v01 \
+    --config-name hubert_base_info_align_v02 \
     hydra.run.dir=${expdir} \
     common.log_file=train.log \
     task.data=${LAB_DIR} \

@@ -14,7 +14,11 @@ from omegaconf import II
 
 from fairseq import utils
 #from fairseq.data.data_utils import compute_mask_and_hide_indices
-from fairseq.data.info_align_data_utils import compute_mask_and_hide_indices
+from fairseq.data.info_align_data_utils import (
+    compute_mask_and_hide_indices, 
+    compute_neighboring_mask_and_hide_indices,
+    compute_neighboring_phn_mask_and_phn_hide_indices, 
+)
 from fairseq.data.dictionary import Dictionary
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
 from fairseq.models.fairseq_model import check_type
@@ -41,6 +45,8 @@ from fairseq.models.hubert.hubert import (
 from fairseq.tasks.hubert_info_align_pretraining import (
     HubertInfoAlignPretrainingConfig,
     HubertInfoAlignPretrainingTask,
+    HubertInfoAlignPhnMaskPretrainingConfig,
+    HubertInfoAlignPhnMaskPretrainingTask,
 )
 
 logger = logging.getLogger(__name__)
@@ -276,7 +282,7 @@ class HubertInfoAlignModel(BaseFairseqModel):
             mask_span_selected != [(0, 0)] or 
             hide_span_selected != [(0, 0)]
             ):
-            mask_indices, hide_indices = compute_mask_and_hide_indices(
+            mask_indices, hide_indices = compute_neighboring_mask_and_hide_indices(
                 (B, T),
                 padding_mask,
                 self.mask_lengths,
@@ -292,8 +298,8 @@ class HubertInfoAlignModel(BaseFairseqModel):
                 mask_dropout=0.0, 
                 hide_dropout=0.0, 
             )
-            #print(mask_indices[0])
-            #print(hide_indices[0])
+            #logger.info(mask_indices[0])
+            #logger.info(hide_indices[0])
             mask_indices = torch.from_numpy(mask_indices).to(x.device)
             hide_indices = torch.from_numpy(hide_indices).to(x.device)
             x[mask_indices] = self.mask_emb
@@ -346,7 +352,7 @@ class HubertInfoAlignModel(BaseFairseqModel):
         def extract_masked_consecutive_id(masked_bool, unit_seq): 
             # get indices of all True values
             true_indices = torch.where(masked_bool)[0]
-    
+        
             # check if indices form consecutive sequence -- there is only 1 [MASK] region
             if len(true_indices) > 0 and true_indices[-1] - true_indices[0] == len(true_indices) - 1:
                 masked_unit_seq = unit_seq[true_indices]
@@ -390,14 +396,14 @@ class HubertInfoAlignModel(BaseFairseqModel):
 
         for i in range(bsz): 
             masked_bool = masked_indices[i]
-            #print(masked_bool)
+            #logger.info(masked_bool)
             masked_unit_seq = extract_masked_consecutive_id(masked_bool, prev_output_tokens[i])
             masked_target_seq = extract_masked_consecutive_id(masked_bool, encoder_out["target"][i])
             assert len(masked_unit_seq) == len(masked_target_seq)
             masked_prev_output_tokens[i][: len(masked_unit_seq)] = masked_unit_seq
             masked_target[i][: len(masked_target_seq)] = masked_target_seq
-        #print(masked_prev_output_tokens)
-        #print(masked_target)
+        #logger.info(masked_prev_output_tokens)
+        #logger.info(masked_target)
 
         # forward decoder 
         # IMPORTANT: only feed the decoder the [MASK] unit seq instead of the full unit seq!
@@ -405,18 +411,18 @@ class HubertInfoAlignModel(BaseFairseqModel):
             masked_prev_output_tokens,
             encoder_out=encoder_out,
         )
-        #print(decoder_out.shape) # torch.Size([4, 50, 1004])
-        #print(masked_prev_output_tokens.shape) # torch.Size([4, 50])
-        #print(masked_target.shape) # torch.Size([4, 50])
-        #print(masked_target)
+        #logger.info(decoder_out.shape) # torch.Size([4, 50, 1004])
+        #logger.info(masked_prev_output_tokens.shape) # torch.Size([4, 50])
+        #logger.info(masked_target.shape) # torch.Size([4, 50])
+        #logger.info(masked_target)
 
         # compute logprob on [MASK] regions
         logit_m = decoder_out[masked_prev_output_tokens != self.tgt_dict.pad()]
-        #print(logit_m.shape) # torch.Size([133, 1004])
+        #logger.info(logit_m.shape) # torch.Size([133, 1004])
 
         target_list_m = masked_target[masked_target != -1]
-        #print(target_list_m.shape) # torch.Size([133])
-        #print(target_list_m)
+        #logger.info(target_list_m.shape) # torch.Size([133])
+        #logger.info(target_list_m)
 
         result = {
             "logit_m_list": [logit_m],
@@ -461,20 +467,20 @@ class HubertInfoAlignModel(BaseFairseqModel):
         hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
     ) -> Dict[str, torch.Tensor]:
 
-        #print(source.shape) # torch.Size([4, 67200])
-        #print(target.shape) # torch.Size([4, 209])
-        #print(padding_mask.shape)
+        #logger.info(source.shape) # torch.Size([4, 67200])
+        #logger.info(target.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask.shape)
         features = self.forward_encoder_features(source)
-        #print(features.shape) # torch.Size([4, 512, 209])
+        #logger.info(features.shape) # torch.Size([4, 512, 209])
         if target is not None:
             features, target = self.forward_targets(features, target)
 
-        #print(features.shape) # torch.Size([4, 512, 209])
-        #print(target.shape) # torch.Size([4, 209])
-        #print(padding_mask)
-        #print(padding_mask.shape) # torch.Size([4, 67200])
-        #print(mask) # True 
-        #print(output_layer) # None
+        #logger.info(features.shape) # torch.Size([4, 512, 209])
+        #logger.info(target.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask)
+        #logger.info(padding_mask.shape) # torch.Size([4, 67200])
+        #logger.info(mask) # True 
+        #logger.info(output_layer) # None
 
         features = features.transpose(1, 2) # torch.Size([4, 209, 512])
         features = self.encoder.layer_norm(features)
@@ -482,12 +488,12 @@ class HubertInfoAlignModel(BaseFairseqModel):
         if padding_mask is not None:
             padding_mask = self.forward_encoder_padding_mask(features, padding_mask)
 
-        #print(padding_mask.shape) # torch.Size([4, 209])
-        #print(padding_mask)
+        #logger.info(padding_mask.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask)
 
         if self.encoder.post_extract_proj is not None:
             features = self.encoder.post_extract_proj(features)
-        #print(features.shape) # torch.Size([4, 209, 768])
+        #logger.info(features.shape) # torch.Size([4, 209, 768])
 
         features = self.encoder.dropout_input(features)
 
@@ -510,13 +516,13 @@ class HubertInfoAlignModel(BaseFairseqModel):
             layer=None if output_layer is None else output_layer - 1,
         )
         
-        #print(x.shape) # torch.Size([4, 209, 768])
+        #logger.info(x.shape) # torch.Size([4, 209, 768])
         proj_x = self.encoder.final_proj(x) # D: 768 --> 256
         proj_x = proj_x.transpose(0, 1)
         features = features.transpose(0, 1)
 
-        #print(proj_x.shape) # torch.Size([209, 4, 256])
-        #print(features.shape) # torch.Size([209, 4, 768])
+        #logger.info(proj_x.shape) # torch.Size([209, 4, 256])
+        #logger.info(features.shape) # torch.Size([209, 4, 768])
         
         return {
                 "encoder_out": [proj_x],  # T x B x C
@@ -543,6 +549,330 @@ class HubertInfoAlignModel(BaseFairseqModel):
         )
         feature = res["features"] if ret_conv else res["encoder_out"]
         return feature, res["encoder_padding_mask"]
+
+    def get_logits(self, net_output):
+        logits_list = net_output["logit_m_list"]
+        logits_list = [x.float() for x in logits_list if x is not None]
+        return logits_list
+
+    def get_targets(self, net_output):
+        targets_list = net_output["target_list"]
+        targets_list = [x.type(torch.LongTensor) for x in targets_list]
+        return targets_list
+
+
+@register_model("hubert_info_align_phn_mask", dataclass=HubertInfoAlignConfig)
+class HubertInfoAlignPhnMaskModel(HubertInfoAlignModel):
+    def __init__(
+        self,
+        hubert_encoder: HubertModel, 
+        unit_decoder: TransformerUnitDecoder, 
+        cfg: HubertInfoAlignConfig,
+        task_cfg: HubertInfoAlignPhnMaskPretrainingConfig,
+        tgt_dict: Dictionary,
+    ) -> None:
+        logger.info(f"HubertInfoAlignPhnMaskModel Config: {cfg}")
+
+        super().__init__(hubert_encoder, unit_decoder, cfg, task_cfg, tgt_dict)
+
+    @classmethod
+    def build_model(cls, cfg: HubertInfoAlignConfig, task: HubertInfoAlignPhnMaskPretrainingTask):
+        
+        assert len(task.dictionaries) == 1
+        tgt_dict = task.dictionaries[0]
+
+        # Hubert encoder 
+        encoder = cls.build_encoder(cfg.pretrained_hubert_ckpt, cfg, task.cfg, tgt_dict)
+
+        # Autoregressive unit decoder 
+        cfg.encoder_embed_dim = cfg.decoder_encoder_embed_dim
+        cfg.dropout = cfg.decoder_dropout
+        cfg.activation_dropout = cfg.decoder_activation_dropout
+        decoder = cls.build_decoder(cfg, tgt_dict)
+
+        # HubertInfoAlign model 
+        base_model = HubertInfoAlignPhnMaskModel(encoder, 
+                                          decoder, 
+                                          cfg, 
+                                          task.cfg, 
+                                          tgt_dict)
+
+        return base_model
+
+    def apply_encoder_mask_and_hide(self, 
+                   x, 
+                   padding_mask, 
+                   alignment, 
+                   mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+                   hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+                  ):
+        """compute and apply [MASK] and [HIDE] spans to x. 
+        The spans can be sampled at random or pre-specified, and in 
+        either way, no two spans overlap. 
+        Additional, [MASK] and [HIDE] are based on alignment.
+
+        Exmaples of pre-specifying [MASK] and [HIDE] spans:
+            mask_span_selected = [(2, 10), (67, 98)]
+            hide_span_selected = [(21, 45)]
+        """
+        #logger.info(alignment)
+        #logger.info(x.shape)
+        B, T, C = x.shape
+        assert len(mask_span_selected) == 1 and len(hide_span_selected) == 1
+        mask_indices, hide_indices = None, None
+        if (self.mask_random or self.hide_random or 
+            mask_span_selected != [(0, 0)] or 
+            hide_span_selected != [(0, 0)]
+            ):
+            mask_indices, hide_indices = compute_neighboring_phn_mask_and_phn_hide_indices(
+                (B, T),
+                alignment, 
+                padding_mask,
+                self.mask_lengths,
+                self.hide_lengths,
+                mask_random=self.mask_random, 
+                hide_random=self.hide_random, 
+                mask_span_selected=mask_span_selected, 
+                hide_span_selected=hide_span_selected, 
+                no_overlap=self.no_mask_overlap,
+                min_space=self.mask_min_space,
+                mask_dropout=0.0, 
+                hide_dropout=0.0, 
+            )
+            #logger.info(mask_indices[0])
+            #logger.info(hide_indices[0])
+            mask_indices = torch.from_numpy(mask_indices).to(x.device)
+            hide_indices = torch.from_numpy(hide_indices).to(x.device)
+            x[mask_indices] = self.mask_emb
+            x[hide_indices] = self.hide_emb
+
+            return x, mask_indices, hide_indices
+        else: 
+            return x, None, None 
+
+    def forward(
+        self,
+        source: torch.Tensor, 
+        prev_output_tokens: torch.Tensor, 
+        alignment_list: List, 
+        target_list: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        mask: bool = True,
+        output_layer: Optional[int] = None,
+        mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+        hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+    ):
+        assert target_list is None or len(target_list) == 1
+        assert len(alignment_list) == 1
+        target = target_list[0]
+        alignment = alignment_list[0]
+
+        # forward encoder 
+        encoder_out = self.forward_encoder(
+            source, 
+            target, 
+            alignment, 
+            padding_mask, 
+            mask, 
+            output_layer, 
+            mask_span_selected, 
+            hide_span_selected,
+        )
+
+        # determine [MASK] regions
+        masked_indices = torch.logical_and(~encoder_out["encoder_padding_mask"][0], 
+                                            encoder_out["mask_indices"][0])
+        bsz = prev_output_tokens.shape[0]
+        # determine max length of [MASK] region 
+        # this saves space compared to 
+        # max_masked_len = self.mask_lengths[-1] * max(self.num_mask_spans)
+        max_masked_len = 0
+        for i in range(bsz): 
+            true_indices = torch.where(masked_indices[i])[0]
+            max_masked_len = max(max_masked_len, len(true_indices))
+        max_masked_len += max(self.num_mask_spans)-1 # account for the addition of separator token 
+        masked_prev_output_tokens = torch.full((bsz, max_masked_len), self.tgt_dict.pad()).to(prev_output_tokens)
+        masked_target = torch.full((bsz, max_masked_len), -1).to(prev_output_tokens)
+
+        def extract_masked_consecutive_id(masked_bool, unit_seq): 
+            # get indices of all True values
+            true_indices = torch.where(masked_bool)[0]
+        
+            # check if indices form consecutive sequence -- there is only 1 [MASK] region
+            if len(true_indices) > 0 and true_indices[-1] - true_indices[0] == len(true_indices) - 1:
+                masked_unit_seq = unit_seq[true_indices]
+                return masked_unit_seq
+
+            # Below is for cases where there are multiple [MASK] regions. 
+            # We want to extract the [MASK] regions separately such that we can insert 
+            # a separator token (<eos>) in between them. 
+
+            # initialize variables for sequence tracking
+            true_indices_sequences = []
+            current_sequence = []
+            last_index = None
+
+            # iterate over indices and identify consecutive sequences
+            for index in true_indices.tolist():
+                if last_index is None:
+                    # start new sequence
+                    current_sequence.append(index)
+                elif index == last_index + 1:
+                    # continue current sequence
+                    current_sequence.append(index)
+                else:
+                    # end current sequence and start new sequence
+                    true_indices_sequences.append(current_sequence)
+                    current_sequence = [index]
+                last_index = index
+
+            # append final sequence
+            true_indices_sequences.append(current_sequence)
+
+            # filter out sequences of length 1
+            true_indices_sequences = [seq for seq in true_indices_sequences if len(seq) > 1]
+            true_indices_sequences = [torch.tensor(seq, device=true_indices.device) for seq in true_indices_sequences]
+            sequences = [unit_seq[true_idx] for true_idx in true_indices_sequences]
+
+            # insert the separator token in between the [MASK] regions 
+            separator = torch.tensor([self.tgt_dict.eos()]).to(true_indices)
+            sequences = torch.cat([torch.cat([seq, separator]) for seq in sequences], dim=0)
+            return sequences[:-1]
+
+        for i in range(bsz): 
+            masked_bool = masked_indices[i]
+            #logger.info(masked_bool)
+            masked_unit_seq = extract_masked_consecutive_id(masked_bool, prev_output_tokens[i])
+            masked_target_seq = extract_masked_consecutive_id(masked_bool, encoder_out["target"][i])
+
+            # deduplicate prediction targets. be careful on the first and last elements.
+            masked_unit_seq = torch.cat((masked_unit_seq[:1], torch.unique_consecutive(masked_unit_seq[1:])))
+            masked_target_seq = torch.cat((torch.unique_consecutive(masked_target_seq[:-1]), masked_target_seq[-1:]))
+
+            assert len(masked_unit_seq) == len(masked_target_seq)
+            masked_prev_output_tokens[i][: len(masked_unit_seq)] = masked_unit_seq
+            masked_target[i][: len(masked_target_seq)] = masked_target_seq
+
+        # forward decoder 
+        # IMPORTANT: only feed the decoder the [MASK] unit seq instead of the full unit seq!
+        decoder_out, _ = self.decoder(
+            masked_prev_output_tokens,
+            encoder_out=encoder_out,
+        )
+        #logger.info(decoder_out.shape) # torch.Size([4, 50, 1004])
+        #logger.info(masked_prev_output_tokens.shape) # torch.Size([4, 50])
+        #logger.info(masked_target.shape) # torch.Size([4, 50])
+        #logger.info(masked_target)
+
+        # compute logprob on [MASK] regions
+        logit_m = decoder_out[masked_prev_output_tokens != self.tgt_dict.pad()]
+        #logger.info(logit_m.shape) # torch.Size([133, 1004])
+
+        target_list_m = masked_target[masked_target != -1]
+        #logger.info(target_list_m.shape) # torch.Size([133])
+        #logger.info(target_list_m)
+
+        result = {
+            "logit_m_list": [logit_m],
+            "target_list": [target_list_m], 
+        }
+        return result
+
+    #def forward_targets(
+    #    self,
+    #    features: torch.Tensor,
+    #    target_list: List[torch.Tensor],
+    #    alignment_list: List, 
+    #) -> Tuple[torch.Tensor, torch.Tensor, List]:
+    #    # Trim features to ensure labels exist and then get aligned labels
+    #    feat_tsz = features.size(2)
+    #    targ_tsz = min([t.size(1) for t in target_list])
+    #    if self.feat2tar_ratio * feat_tsz > targ_tsz:
+    #        feat_tsz = int(targ_tsz / self.feat2tar_ratio)
+    #        features = features[..., :feat_tsz]
+    #    target_inds = torch.arange(feat_tsz).float() * self.feat2tar_ratio
+    #    target_list = [t[:, target_inds.long()] for t in target_list]
+    #    logger.info(target_inds)
+    #    logger.info(target_list[0])
+    #    exit()
+    #    return features, target_list
+
+    def forward_encoder(
+        self,
+        source: torch.Tensor,
+        target: Optional[torch.Tensor] = None,
+        alignment: Optional[List] = [], 
+        padding_mask: Optional[torch.Tensor] = None,
+        mask: bool = True,
+        output_layer: Optional[int] = None,
+        mask_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+        hide_span_selected: Optional[List[Tuple[int, int]]] = [(0, 0)], 
+    ) -> Dict[str, torch.Tensor]:
+        #logger.info(source.shape) # torch.Size([4, 67200])
+        #logger.info(target.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask.shape)
+        features = self.forward_encoder_features(source)
+        #logger.info(features.shape) # torch.Size([4, 512, 209])
+        if target is not None:
+            features, target = self.forward_targets(features, target)
+
+        #logger.info(features.shape) # torch.Size([4, 512, 209])
+        #logger.info(target.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask)
+        #logger.info(padding_mask.shape) # torch.Size([4, 67200])
+        #logger.info(mask) # True 
+        #logger.info(output_layer) # None
+
+        features = features.transpose(1, 2) # torch.Size([4, 209, 512])
+        features = self.encoder.layer_norm(features)
+
+        if padding_mask is not None:
+            padding_mask = self.forward_encoder_padding_mask(features, padding_mask)
+
+        #logger.info(padding_mask.shape) # torch.Size([4, 209])
+        #logger.info(padding_mask)
+
+        if self.encoder.post_extract_proj is not None:
+            features = self.encoder.post_extract_proj(features)
+        #logger.info(features.shape) # torch.Size([4, 209, 768])
+
+        features = self.encoder.dropout_input(features)
+
+
+        if mask:
+            x, mask_indices, hide_indices = self.apply_encoder_mask_and_hide(features, padding_mask, alignment, mask_span_selected, hide_span_selected)
+        else:
+            x = features
+            mask_indices = None
+            hide_indices = None
+
+        # feature: (B, T, D), float
+        # target: (B, T), long
+        # x: (B, T, D), float
+        # padding_mask: (B, T), bool
+        # mask_indices: (B, T), bool
+        x, _ = self.encoder.encoder(
+            x,
+            padding_mask=padding_mask,
+            layer=None if output_layer is None else output_layer - 1,
+        )
+        
+        #logger.info(x.shape) # torch.Size([4, 209, 768])
+        proj_x = self.encoder.final_proj(x) # D: 768 --> 256
+        proj_x = proj_x.transpose(0, 1)
+        features = features.transpose(0, 1)
+
+        #logger.info(proj_x.shape) # torch.Size([209, 4, 256])
+        #logger.info(features.shape) # torch.Size([209, 4, 768])
+        
+        return {
+                "encoder_out": [proj_x],  # T x B x C
+                "encoder_padding_mask": [padding_mask] if padding_mask is not None else [],  # B x T
+                "mask_indices": [mask_indices] if mask_indices is not None else [], # B x T
+                "hide_indices": [hide_indices] if hide_indices is not None else [], # B x T
+                "features": features, # T x B x C
+                "target": target, # B x T
+                }
 
     def get_logits(self, net_output):
         logits_list = net_output["logit_m_list"]

@@ -7,6 +7,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional
+import logging
 import copy
 
 import torch
@@ -15,6 +16,7 @@ from fairseq import metrics, utils
 from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class HubertInfoAlignCriterionConfig(FairseqDataclass):
@@ -150,3 +152,72 @@ class HubertInfoAlignCriterion(FairseqCriterion):
         to True will improves distributed training speed.
         """
         return False
+
+
+@register_criterion("hubert_info_align_phn_mask", dataclass=HubertInfoAlignCriterionConfig)
+class HubertInfoAlignPhnMaskCriterion(HubertInfoAlignCriterion):
+    def __init__(
+        self,
+        task,
+        pred_masked_weight,
+        log_keys=None,
+    ):
+        super().__init__(task, pred_masked_weight, log_keys)
+
+    def forward(self, model, sample, reduce=True, log_pred=False):
+        """Compute the loss for the given sample.
+        Returns a tuple with three elements:
+        1) the loss
+        2) the sample size, which is used as the denominator for the gradient
+        3) logging outputs to display while training
+        """
+        # construct prev_output_tokens from targets for teacher-forcing
+        prev_output_tokens = torch.full_like(sample["target_list"][0], self.pad_idx)
+        prev_output_tokens[:, 0].fill_(self.eos_idx)
+        prev_output_tokens[:, 1:] = copy.deepcopy(sample["target_list"][0][:, :-1])
+
+        # model forward
+        net_output = model(target_list=sample["target_list"], prev_output_tokens=prev_output_tokens, alignment_list=sample["alignments_list"], **sample["net_input"])
+        loss = 0.0
+        sample_size = 0
+        logging_output = {}
+        reduction = "sum" if reduce else "none"
+
+        loss_m_list = []
+        logp_m_list = model.get_logits(net_output)
+        targ_m_list = model.get_targets(net_output)
+        
+        assert self.pred_masked_weight == 1.0 and len(logp_m_list) > 0
+
+        for i, (logp_m, targ_m) in enumerate(zip(logp_m_list, targ_m_list)):
+            targ_m = targ_m.to(logp_m.device)
+            loss_m = F.cross_entropy(logp_m, targ_m, reduction=reduction)
+            loss_m_list.append(loss_m)
+            logging_output[f"loss_m_{i}"] = loss_m.detach().item()
+        if self.pred_masked_weight > 0:
+            loss += self.pred_masked_weight * sum(loss_m_list)
+            sample_size += targ_m_list[0].numel()
+
+        logging_output = {
+            "loss": loss.item() if reduce else loss,
+            "ntokens": sample_size,
+            "nsentences": sample["id"].numel(),
+            "sample_size": sample_size,
+            **logging_output,
+        }
+
+        for lk in self.log_keys:
+            if lk in net_output:
+                logging_output[lk] = float((net_output[lk]))
+
+        with torch.no_grad():
+            for i, (logp_m, targ_m) in enumerate(zip(logp_m_list, targ_m_list)):
+                targ_m = targ_m.to(logp_m.device)
+                pred_class_m = torch.argmax(logp_m, dim=1)
+                corr_m = (pred_class_m == targ_m).sum().item()
+                count_m = len(targ_m)
+                logging_output[f"correct_m_{i}"] = corr_m
+                logging_output[f"count_m_{i}"] = count_m
+
+        return loss, sample_size, logging_output
+

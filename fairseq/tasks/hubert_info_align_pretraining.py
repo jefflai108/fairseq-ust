@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from omegaconf import MISSING
 
-from fairseq.data import Dictionary, HubertDataset
+from fairseq.data import Dictionary, HubertDataset, HubertPhnMaskDataset
 from fairseq.dataclass.configs import FairseqDataclass
 from fairseq.tasks import register_task
 from fairseq.tasks.fairseq_task import FairseqTask
@@ -102,6 +102,16 @@ class HubertInfoAlignPretrainingConfig(FairseqDataclass):
     )
 
 
+@dataclass
+class HubertInfoAlignPhnMaskPretrainingConfig(HubertInfoAlignPretrainingConfig):
+    alignment_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "MFA alignment directory",
+        },
+    )
+
+
 @register_task("hubert_info_align_pretraining", dataclass=HubertInfoAlignPretrainingConfig)
 class HubertInfoAlignPretrainingTask(FairseqTask):
 
@@ -168,6 +178,97 @@ class HubertInfoAlignPretrainingTask(FairseqTask):
         # hubert v1: pad_audio=True, random_crop=False;
         self.datasets[split] = HubertDataset(
             manifest,
+            sample_rate=self.cfg.sample_rate,
+            label_paths=paths,
+            label_rates=self.cfg.label_rate,
+            pad_list=pad_list,
+            eos_list=eos_list,
+            label_processors=procs,
+            max_keep_sample_size=self.cfg.max_keep_size,
+            min_keep_sample_size=self.cfg.min_sample_size,
+            max_sample_size=self.cfg.max_sample_size,
+            pad_audio=self.cfg.pad_audio,
+            normalize=self.cfg.normalize,
+            store_labels=False,
+            random_crop=self.cfg.random_crop,
+            single_target=self.cfg.single_target,
+        )
+
+    def max_positions(self) -> Tuple[int, int]:
+        return (sys.maxsize, sys.maxsize)
+
+    def filter_indices_by_size(self, indices: np.array, *args, **kwargs) -> np.array:
+        return indices
+
+
+@register_task("hubert_info_align_phn_mask_pretraining", dataclass=HubertInfoAlignPhnMaskPretrainingConfig)
+class HubertInfoAlignPhnMaskPretrainingTask(FairseqTask):
+
+    cfg: HubertInfoAlignPhnMaskPretrainingConfig
+
+    def __init__(
+        self,
+        cfg: HubertInfoAlignPhnMaskPretrainingConfig,
+    ) -> None:
+        super().__init__(cfg)
+
+        logger.info(f"current directory is {os.getcwd()}")
+        logger.info(f"HubertInfoAlignPhnMaskPretrainingTask Config {cfg}")
+
+        self.cfg = cfg
+        self.fine_tuning = cfg.fine_tuning
+
+        if cfg.fine_tuning:
+            self.state.add_factory("target_dictionary", self.load_dictionaries)
+        else:
+            self.state.add_factory("dictionaries", self.load_dictionaries)
+
+        self.blank_symbol = "<s>"
+
+    @property
+    def source_dictionary(self) -> Optional[Dictionary]:
+        return None
+
+    @property
+    def target_dictionary(self) -> Optional[Dictionary]:
+        return self.state.target_dictionary
+
+    @property
+    def dictionaries(self) -> List[Dictionary]:
+        return self.state.dictionaries
+
+    @classmethod
+    def setup_task(
+        cls, cfg: HubertInfoAlignPhnMaskPretrainingConfig, **kwargs
+    ) -> "HubertInfoAlignPhnMaskPretrainingTask":
+        return cls(cfg)
+
+    def load_dictionaries(self):
+        label_dir = self.cfg.data if self.cfg.label_dir is None else self.cfg.label_dir
+        dictionaries = [
+            Dictionary.load(f"{label_dir}/dict.{label}.txt")
+            for label in self.cfg.labels
+        ]
+        return dictionaries[0] if self.cfg.fine_tuning else dictionaries
+
+    def get_label_dir(self) -> str:
+        if self.cfg.label_dir is None:
+            return self.cfg.data
+        return self.cfg.label_dir
+
+    def load_dataset(self, split: str, **kwargs) -> None:
+        manifest = f"{self.cfg.data}/{split}.tsv"
+        phn_alignment = f"{self.cfg.alignment_dir}/{split}-phones_seg.pkl"
+        dicts = [self.target_dictionary] if self.cfg.fine_tuning else self.dictionaries
+        pad_list = [dict.pad() for dict in dicts]
+        eos_list = [dict.eos() for dict in dicts]
+        procs = [LabelEncoder(dict) for dict in dicts]
+        paths = [f"{self.get_label_dir()}/{split}.{l}" for l in self.cfg.labels]
+
+        # hubert v1: pad_audio=True, random_crop=False;
+        self.datasets[split] = HubertPhnMaskDataset(
+            manifest,
+            phn_alignment, 
             sample_rate=self.cfg.sample_rate,
             label_paths=paths,
             label_rates=self.cfg.label_rate,
